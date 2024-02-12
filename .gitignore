@@ -1,0 +1,10 @@
+bin/
+
+*.pdf
+*.png
+
+*.dat
+*.log
+*.bin
+
+*.synctex.gz
