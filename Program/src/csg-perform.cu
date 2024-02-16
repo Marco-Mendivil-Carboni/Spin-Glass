@@ -12,11 +12,12 @@ int main(
   const char **argv) //argument vector
 {
   //check command-line arguments
-  if (argc<2){ std::cout<<"no arguments\n"; return EXIT_FAILURE;}
-  if (argc>2){ std::cout<<"extra arguments\n"; return EXIT_FAILURE;}
+  if (argc<3){ std::cout<<"missing arguments\n"; return EXIT_FAILURE;}
+  if (argc>3){ std::cout<<"extra arguments\n"; return EXIT_FAILURE;}
 
   //declare auxiliary variables
   const std::string sim_dir = argv[1]; //simulation directory
+  float beta = std::stof(argv[2]); //inverse temperature
   std::ifstream inp_f; //input file
   std::ofstream out_f; //output file
   std::string pathstr; //file path string
@@ -31,13 +32,8 @@ int main(
   //main try block
   try
   {
-    //read parameters and initialize simulation
-    pathstr = sim_dir+"/adjustable-parameters.dat";
-    inp_f.open(pathstr);
-    mmc::check_file(inp_f,pathstr);
-    mmc::parmap par(inp_f); //parameters
-    inp_f.close();
-    mmc::eamsim sim(par); //simulation
+    //initialize simulation
+    mmc::eamsim sim(beta); //simulation
   }
   catch (const mmc::error &err) //caught error
   {

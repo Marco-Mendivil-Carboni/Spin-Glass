@@ -13,36 +13,47 @@ namespace mmc //Marco Mendívil Carboni
 
 //Constants
 
+static constexpr uint PLTABW = 16; //probability lookup table width
+
+static constexpr uint NSBS = 32; //number of MC steps between swaps
+
 //Aliases
 
 using prng = curandStatePhilox4_32_10; //PRNG type
-
-//Enumerations
 
 //Device Functions
 
 //Host Functions
 
 //EA model simulation constructor
-eamsim::eamsim(parmap &par) //parameters
+eamsim::eamsim(float beta) //inverse temperature
+  : eamdat()
+  , beta {beta}
 {
   //check parameters
-  std::string msg = "hello :D"; //message
-  logger::record(msg);
+  if (!(0.125<=beta&&beta<=2.0))
+  {
+    throw error("inverse temperature out of range");
+  }
 
   //allocate device memory
-
-  //allocate host memory
+  cuda_check(cudaMalloc(&prob,NREP*PLTABW*sizeof(float)));
+  //...
 
   //initialize PRNG
+
+  //record success message
+  std::string msg = "eamsim initialized "; //message
+  msg += "beta = "+cnfs(beta,5,'0',1)+" ";
+  logger::record(msg);
 }
 
 //EA model simulation destructor
 eamsim::~eamsim()
 {
   //deallocate device memory
-
-  //deallocate host memory
+  cuda_check(cudaFree(prob));
+  //...
 }
 
 } //namespace mmc

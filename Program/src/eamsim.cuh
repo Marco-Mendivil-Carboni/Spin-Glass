@@ -3,7 +3,7 @@
 
 //Includes
 
-#include "util.cuh" //general utilities
+#include "eamdat.cuh" //EA model data
 
 //Namespace
 
@@ -14,14 +14,14 @@ namespace mmc //Marco Mendívil Carboni
 
 //Classes
 
-class eamsim //EA model simulation
+class eamsim : eamdat //EA model simulation
 {
   public:
 
   //Functions
 
   //EA model simulation constructor
-  eamsim(parmap &par); //parameters
+  eamsim(float beta); //inverse temperature
 
   //EA model simulation destructor
   ~eamsim();
@@ -29,6 +29,14 @@ class eamsim //EA model simulation
   private:
 
   //Parameters and Variables
+
+  const float beta; //inverse temperature
+
+  float *prob; //probability lookup table
+
+  void *vprng; //void PRNG array
+
+  uint *slattice; //shuffled lattice array
 
   //Functions
 };

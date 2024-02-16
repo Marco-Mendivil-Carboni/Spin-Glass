@@ -58,27 +58,6 @@ class error : public std::runtime_error //generic exception type
   error(const std::string &msg); //error message
 };
 
-class parmap : public std::map<std::string,std::string> //parameter map
-{
-  public:
-
-  //Functions
-
-  //parmap constructor
-  parmap(std::istream &par_s); //parameter stream
-
-  //get parameter value
-  template <typename T> T get_val(
-    std::string key, //parameter key
-    T def_val) //default value
-  {
-    T val; //parameter value
-    if (find(key)==end()){ val = def_val;}
-    else{ std::stringstream{at(key)}>>val;}
-    return val;
-  }
-};
-
 //Functions
 
 //check for errors in cuda runtime API call
@@ -98,7 +77,8 @@ template <typename T> std::string cnfs(
   if (len>0){ num_str<<std::setw(len);}
   if (fillc!=' '){ num_str<<std::setfill(fillc);}
   if (prc>0){ num_str<<std::setprecision(prc)<<std::fixed;}
-  num_str<<num; return num_str.str();
+  num_str<<num;
+  return num_str.str();
 }
 
 //check file is open or else throw

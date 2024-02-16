@@ -73,17 +73,6 @@ logger &logger::get_instance()
 error::error(const std::string &msg) //error message
   : std::runtime_error(msg) {}
 
-//parmap constructor
-parmap::parmap(std::istream &par_s) //parameter stream
-{
-  std::string key; //parameter key
-  std::string val; //parameter value
-  while (par_s>>key>>val)
-  {
-    insert({key,val});
-  }
-}
-
 //check for errors in cuda runtime API call
 void cuda_check(cudaError_t rtn_val) //cuda runtime API call return value
 {
