@@ -14,7 +14,7 @@ namespace mmc //Marco Mendívil Carboni
 
 //Classes
 
-class eamsim : eamdat //EA model simulation
+class eamsim : public eamdat //EA model simulation
 {
   public:
 
@@ -25,6 +25,9 @@ class eamsim : eamdat //EA model simulation
 
   //EA model simulation destructor
   ~eamsim();
+
+  //initialize lattice array
+  void init_lattice();
 
   private:
 
@@ -37,8 +40,6 @@ class eamsim : eamdat //EA model simulation
   void *vprng; //void PRNG array
 
   uint *slattice; //shuffled lattice array
-
-  //Functions
 };
 
 } //namespace mmc

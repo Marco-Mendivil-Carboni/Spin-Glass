@@ -18,10 +18,10 @@ int main(
   //declare auxiliary variables
   const std::string sim_dir = argv[1]; //simulation directory
   float beta = std::stof(argv[2]); //inverse temperature
-  std::ifstream inp_f; //input file
-  std::ofstream out_f; //output file
   std::string pathstr; //file path string
   std::string pathpat; //file path pattern
+  std::ifstream inp_f; //input file
+  std::ofstream out_f; //output file
   uint i_s_f; //simulation file index
 
   //create log file in current working directory
@@ -34,6 +34,30 @@ int main(
   {
     //initialize simulation
     mmc::eamsim sim(beta); //simulation
+
+    //search for previous simulations
+    pathpat = sim_dir+"/sim-"+mmc::cnfs(beta,5,'0',3)+"-*";
+    i_s_f = mmc::glob_count(pathpat);
+
+    if (i_s_f==0) //initialize lattice array
+    {
+      sim.init_lattice();
+    }
+    else //read lattice array from previous simulation
+    {
+      pathstr = sim_dir+"/sim-"+mmc::cnfs(beta,5,'0',3)+"-";
+      pathstr += mmc::cnfs(i_s_f-1,2,'0')+".bin";
+      inp_f.open(pathstr,std::ios::binary);
+      mmc::check_file(inp_f,pathstr);
+      sim.read_state(inp_f);
+    }
+  
+    //temporary
+    pathstr = sim_dir+"/sim-"+mmc::cnfs(beta,5,'0',3)+"-";
+    pathstr += mmc::cnfs(i_s_f,2,'0')+".bin";
+    out_f.open(pathstr,std::ios::binary);
+    mmc::check_file(out_f,pathstr);
+    sim.write_state(out_f);
   }
   catch (const mmc::error &err) //caught error
   {

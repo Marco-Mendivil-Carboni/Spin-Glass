@@ -19,8 +19,7 @@ eamdat::eamdat()
   cuda_check(cudaMallocHost(&lattice_h,NDIS*N*sizeof(uint)));
 
   //record success message
-  std::string msg = "eamdat initialized "; //message
-  logger::record(msg);
+  logger::record("eamdat initialized");
 }
 
 //EA model data destructor
