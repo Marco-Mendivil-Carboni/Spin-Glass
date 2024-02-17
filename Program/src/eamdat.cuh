@@ -5,11 +5,6 @@
 
 #include "util.cuh" //general utilities
 
-//Namespace
-
-namespace mmc //Marco Mendívil Carboni
-{
-
 //Constants
 
 static constexpr uint L = 16; //lattice size
@@ -30,12 +25,10 @@ static constexpr uint MASKJ2 = 0x10000000; //00010000000000000000000000000000
 static constexpr uint MASKJ3 = 0x20000000; //00100000000000000000000000000000
 static constexpr uint MASKJ4 = 0x40000000; //01000000000000000000000000000000
 static constexpr uint MASKJ5 = 0x80000000; //10000000000000000000000000000000
-
 static constexpr uint MASKE = 0x0000000f; //00000000000000000000000000001111
 
 static constexpr uint SHIFTS = 24;
 static constexpr uint SHIFTJ = 26;
-
 // static constexpr uint SHIFT_J1 = 27;
 // static constexpr uint SHIFT_J2 = 28;
 // static constexpr uint SHIFT_J3 = 29;
@@ -70,7 +63,5 @@ class eamdat //EA model data
 
   uint *lattice_h; //lattice host array
 };
-
-} //namespace mmc
 
 #endif //MMC_EAMDAT_H

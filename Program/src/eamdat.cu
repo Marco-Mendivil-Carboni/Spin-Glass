@@ -2,11 +2,6 @@
 
 #include "eamdat.cuh" //EA model data
 
-//Namespace
-
-namespace mmc //Marco Mendívil Carboni
-{
-
 //Functions
 
 //EA model data constructor
@@ -39,10 +34,7 @@ void eamdat::write_state(std::ofstream &bin_out_f) //binary output file
   bin_out_f.write(reinterpret_cast<char *>(lattice_h),NDIS*N*sizeof(uint));
 
   //check filestream
-  if (bin_out_f.fail())
-  {
-    throw mmc::error("failed to write state to binary file");
-  }
+  if (bin_out_f.fail()){ throw error("failed to write state to binary file");}
 }
 
 //read state from binary file
@@ -56,10 +48,5 @@ void eamdat::read_state(std::ifstream &bin_inp_f) //binary input file
     cudaMemcpyHostToDevice));
 
   //check filestream
-  if (bin_inp_f.fail())
-  {
-    throw mmc::error("failed to read state from binary file");
-  }
+  if (bin_inp_f.fail()){ throw error("failed to read state from binary file");}
 }
-
-} //namespace mmc

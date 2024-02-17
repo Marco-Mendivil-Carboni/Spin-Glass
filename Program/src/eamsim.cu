@@ -6,11 +6,6 @@
 
 #include <curand_kernel.h> //cuRAND device functions
 
-//Namespace
-
-namespace mmc //Marco Mendívil Carboni
-{
-
 //Constants
 
 static constexpr uint PLTABW = 14; //probability lookup table width
@@ -110,13 +105,15 @@ void init_coupling_constants(
       {
 	      uint z1 = (z+L-1)%L; //1st z index
 	      uint z2 = z; //2nd z index
-	      uint J = //lattice coupling constant
+
+	      uint J = //site's coupling constants
 	        MASKJ0*Jx[L*L*z+L*y+x1]|
 	        MASKJ1*Jx[L*L*z+L*y+x2]|
 	        MASKJ2*Jy[L*L*z+L*y1+x]|
 	        MASKJ3*Jy[L*L*z+L*y2+x]|
 	        MASKJ4*Jz[L*L*z1+L*y+x]|
 	        MASKJ5*Jz[L*L*z2+L*y+x];
+
         uint i_s = L*L*z+L*y+x; //site index
         lattice_h[i_s] = J|(lattice_h[i_s]&MASKAS);
       }
@@ -146,5 +143,3 @@ void eamsim::init_lattice()
   //record success message
   logger::record("lattice array initialized");
 }
-
-} //namespace mmc

@@ -3,25 +3,20 @@
 
 //Includes
 
-#include "util.cuh" //general utilities
-
-//Namespace
-
-namespace mmc //Marco Mendívil Carboni
-{
+#include "eamdat.cuh" //EA model data
 
 //Structures
 
 //Classes
 
-class eamana //EA model analysis
+class eamana : public eamdat //EA model analysis
 {
   public:
 
   //Functions
 
   //EA model analysis constructor
-  eamana(parmap &par); //parameters
+  eamana();
 
   //EA model analysis destructor
   ~eamana();
@@ -29,10 +24,6 @@ class eamana //EA model analysis
   private:
 
   //Parameters and Variables
-
-  //Functions
 };
-
-} //namespace mmc
 
 #endif //MMC_EAMANA_H

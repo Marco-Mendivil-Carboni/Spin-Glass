@@ -7,11 +7,6 @@
 #include <iomanip> //input/output parametric manipulators
 #include <map> //map container classes
 
-//Namespace
-
-namespace mmc //Marco Mendívil Carboni
-{
-
 //Classes
 
 class logger //basic logger
@@ -88,7 +83,5 @@ template <typename T> void check_file(
 {
   if (!s_f.is_open()){ throw error("unable to open "+pathstr);}
 }
-
-} //namespace mmc
 
 #endif //MMC_UTIL_H

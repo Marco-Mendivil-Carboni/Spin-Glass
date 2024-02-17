@@ -5,11 +5,6 @@
 
 #include "eamdat.cuh" //EA model data
 
-//Namespace
-
-namespace mmc //Marco Mendívil Carboni
-{
-
 //Structures
 
 //Classes
@@ -41,7 +36,5 @@ class eamsim : public eamdat //EA model simulation
 
   uint *slattice; //shuffled lattice array
 };
-
-} //namespace mmc
 
 #endif //MMC_EAMSIM_H

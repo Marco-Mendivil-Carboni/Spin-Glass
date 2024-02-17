@@ -27,17 +27,17 @@ int main(
   //create log file in current working directory
   time_t t_s = time(nullptr); //starting time
   pathstr = std::to_string(t_s)+".log";
-  mmc::logger::set_file(pathstr);
+  logger::set_file(pathstr);
 
   //main try block
   try
   {
     //initialize simulation
-    mmc::eamsim sim(beta); //simulation
+    eamsim sim(beta); //simulation
 
     //search for previous simulations
-    pathpat = sim_dir+"/sim-"+mmc::cnfs(beta,5,'0',3)+"-*";
-    i_s_f = mmc::glob_count(pathpat);
+    pathpat = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-*";
+    i_s_f = glob_count(pathpat);
 
     if (i_s_f==0) //initialize lattice array
     {
@@ -45,29 +45,29 @@ int main(
     }
     else //read lattice array from previous simulation
     {
-      pathstr = sim_dir+"/sim-"+mmc::cnfs(beta,5,'0',3)+"-";
-      pathstr += mmc::cnfs(i_s_f-1,2,'0')+".bin";
+      pathstr = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
+      pathstr += cnfs(i_s_f-1,2,'0')+".bin";
       inp_f.open(pathstr,std::ios::binary);
-      mmc::check_file(inp_f,pathstr);
+      check_file(inp_f,pathstr);
       sim.read_state(inp_f);
     }
   
     //temporary
-    pathstr = sim_dir+"/sim-"+mmc::cnfs(beta,5,'0',3)+"-";
-    pathstr += mmc::cnfs(i_s_f,2,'0')+".bin";
+    pathstr = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
+    pathstr += cnfs(i_s_f,2,'0')+".bin";
     out_f.open(pathstr,std::ios::binary);
-    mmc::check_file(out_f,pathstr);
+    check_file(out_f,pathstr);
     sim.write_state(out_f);
   }
-  catch (const mmc::error &err) //caught error
+  catch (const error &err) //caught error
   {
     //exit program unsuccessfully
-    mmc::logger::record(err.what());
+    logger::record(err.what());
     return EXIT_FAILURE;
   }
 
   //remove log file
-  mmc::logger::set_file("/dev/null");
+  logger::set_file("/dev/null");
   pathstr = std::to_string(t_s)+".log";
   std::remove(pathstr.c_str());
 

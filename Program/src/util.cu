@@ -6,11 +6,6 @@
 
 #include <glob.h> //pathname pattern matching types
 
-//Namespace
-
-namespace mmc //Marco Mendívil Carboni
-{
-
 //Functions
 
 //set log file and open it
@@ -101,5 +96,3 @@ uint glob_count(const std::string &pathpat) //file path pattern
     return glob_sr.gl_pathc;
   }
 }
-
-} //namespace mmc
