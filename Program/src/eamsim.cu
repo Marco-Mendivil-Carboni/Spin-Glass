@@ -30,10 +30,8 @@ eamsim::eamsim(float beta) //inverse temperature
   , beta {beta}
 {
   //check parameters
-  if (!(0.125<=beta&&beta<=8.0))
-  {
-    throw error("inverse temperature out of range");
-  }
+  if (!(0.125<=beta&&beta<=8.0)){ throw error("beta out of range");}
+  logger::record("beta = "+cnfs(beta,5,'0',3));
 
   //allocate device memory
   cuda_check(cudaMalloc(&prob,NREP*PLTABW*sizeof(float)));
@@ -44,7 +42,6 @@ eamsim::eamsim(float beta) //inverse temperature
 
   //record success message
   logger::record("eamsim initialized");
-  logger::record("beta = "+cnfs(beta,5,'0',3));
 }
 
 //EA model simulation destructor
@@ -93,28 +90,23 @@ void init_coupling_constants(
   }
 
   //copy coupling constants to lattice
-  for (uint x = 0; x<L; ++x) //x index
+  for (uint xa = 0; xa<L; ++xa) //advanced x index
   {
-    uint x1 = (x+L-1)%L; //1st x index
-    uint x2 = x; //2nd x index
-    for (uint y = 0; y<L; ++y) //y index
+    uint xr = (xa+L-1)%L; //retarded x index
+    for (uint ya = 0; ya<L; ++ya) //advanced y index
     {
-      uint y1 = (y+L-1)%L; //1st y index
-      uint y2 = y; //2nd y index
-      for (uint z = 0; z<L; ++z) //z index
+      uint yr = (ya+L-1)%L; //retarded y index
+      for (uint za = 0; za<L; ++za) //advanced z index
       {
-	      uint z1 = (z+L-1)%L; //1st z index
-	      uint z2 = z; //2nd z index
-
+	      uint zr = (za+L-1)%L; //retarded z index
 	      uint J = //site's coupling constants
-	        MASKJ0*Jx[L*L*z+L*y+x1]|
-	        MASKJ1*Jx[L*L*z+L*y+x2]|
-	        MASKJ2*Jy[L*L*z+L*y1+x]|
-	        MASKJ3*Jy[L*L*z+L*y2+x]|
-	        MASKJ4*Jz[L*L*z1+L*y+x]|
-	        MASKJ5*Jz[L*L*z2+L*y+x];
-
-        uint i_s = L*L*z+L*y+x; //site index
+	        (MASKSJ<<0)*Jx[L*L*za+L*ya+xr]|
+	        (MASKSJ<<1)*Jx[L*L*za+L*ya+xa]|
+	        (MASKSJ<<2)*Jy[L*L*za+L*yr+xa]|
+	        (MASKSJ<<3)*Jy[L*L*za+L*ya+xa]|
+	        (MASKSJ<<4)*Jz[L*L*zr+L*ya+xa]|
+	        (MASKSJ<<5)*Jz[L*L*za+L*ya+xa];
+        uint i_s = L*L*za+L*ya+xa; //site index
         lattice_h[i_s] = J|(lattice_h[i_s]&MASKAS);
       }
     }

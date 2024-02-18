@@ -16,19 +16,20 @@ static constexpr uint NSEG = 6; //number of spin segments
 static constexpr uint NSPS = 4; //number of spins per segment
 static constexpr uint NREP = 24; //number of temperature replicas
 
-static constexpr uint MASKAS = 0x00ffffff; //00000000111111111111111111111111
-// static constexpr uint MASKS0 = 0x00111111; //00000000000100010001000100010001
-static constexpr uint MASKAJ = 0xfc000000; //11111100000000000000000000000000
-static constexpr uint MASKJ0 = 0x04000000; //00000100000000000000000000000000
-static constexpr uint MASKJ1 = 0x08000000; //00001000000000000000000000000000
-static constexpr uint MASKJ2 = 0x10000000; //00010000000000000000000000000000
-static constexpr uint MASKJ3 = 0x20000000; //00100000000000000000000000000000
-static constexpr uint MASKJ4 = 0x40000000; //01000000000000000000000000000000
-static constexpr uint MASKJ5 = 0x80000000; //10000000000000000000000000000000
-static constexpr uint MASKE = 0x0000000f; //00000000000000000000000000001111
+static constexpr uint MASKAS = 0x00ffffff; //all spins mask
+static constexpr uint MASKSS = 0x00111111; //spin segments mask
+static constexpr uint MASKAJ = 0xfc000000; //all coupling constants mask
+static constexpr uint MASKSJ = 0x04000000; //single coupling constant mask
+static constexpr uint MASKES = 0x0000000f; //energy-spin index mask
 
-static constexpr uint SHIFTS = 24;
-static constexpr uint SHIFTJ = 26;
+// MASKAS = 00000000111111111111111111111111
+// MASKSS = 00000000000100010001000100010001
+// MASKAJ = 11111100000000000000000000000000
+// MASKSJ = 00000100000000000000000000000000
+// MASKES = 00000000000000000000000000001111
+
+static constexpr uint SHIFTS = 24; //--------------------------------------------
+static constexpr uint SHIFTJ = 26; //--------------------------------------------
 // static constexpr uint SHIFT_J1 = 27;
 // static constexpr uint SHIFT_J2 = 28;
 // static constexpr uint SHIFT_J3 = 29;
