@@ -8,12 +8,9 @@
 
 //Constants
 
-static constexpr uint PLTABW = 14; //probability lookup table width
-
-static constexpr uint NSBS = 32; //number of MC steps between swaps
+static constexpr uint MCSBS = 32; //MC steps between swaps
 
 static constexpr uint NTPB = 256; //number of threads per block
-
 static constexpr uint NBLK = (N*NDIS+NTPB-1)/NTPB; //number of blocks
 
 //Aliases
@@ -21,6 +18,22 @@ static constexpr uint NBLK = (N*NDIS+NTPB-1)/NTPB; //number of blocks
 using prng = curandStatePhilox4_32_10; //PRNG type
 
 //Device Functions
+
+//Global Functions
+
+//initialize PRNG state array
+__global__ void init_prng(
+  void *vprngs, //void PRNG state array
+  uint pseed) //PRNG seed
+{
+  //calculate thread index
+  uint i_t = blockIdx.x*blockDim.x+threadIdx.x; //thread index
+  if (i_t>=N*NDIS){ return;}
+
+  //initialize PRNG state
+  prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
+  curand_init(pseed,i_t,0,&prngs[i_t]);
+}
 
 //Host Functions
 
@@ -34,11 +47,18 @@ eamsim::eamsim(float beta) //inverse temperature
   logger::record("beta = "+cnfs(beta,5,'0',3));
 
   //allocate device memory
-  cuda_check(cudaMalloc(&prob,NREP*PLTABW*sizeof(float)));
-  cuda_check(cudaMalloc(&vprng,NTPB*NBLK*sizeof(prng)));
-  cuda_check(cudaMalloc(&slattice,NDIS*N*sizeof(uint)));
+  cuda_check(cudaMalloc(&rbeta,NREP*NDIS*sizeof(ibeta)));
+  cuda_check(cudaMalloc(&vprngs,N*NDIS*sizeof(prng)));
+  cuda_check(cudaMalloc(&slattice,N*NDIS*sizeof(uint)));
 
-  //initialize PRNG
+  //allocate host memory
+  cuda_check(cudaMallocHost(&rbeta_h,NREP*NDIS*sizeof(ibeta)));
+
+  //initialize replica beta array
+  init_rbeta();
+
+  //initialize PRNG state array
+  init_prng<<<NTPB,NBLK>>>(vprngs,time(nullptr));
 
   //record success message
   logger::record("eamsim initialized");
@@ -48,9 +68,12 @@ eamsim::eamsim(float beta) //inverse temperature
 eamsim::~eamsim()
 {
   //deallocate device memory
-  cuda_check(cudaFree(prob));
-  cuda_check(cudaFree(vprng));
+  cuda_check(cudaFree(rbeta));
+  cuda_check(cudaFree(vprngs));
   cuda_check(cudaFree(slattice));
+
+  //deallocate host memory
+  cuda_check(cudaFreeHost(rbeta_h));
 }
 
 //initialize lattice multispins
@@ -129,9 +152,39 @@ void eamsim::init_lattice()
   }
 
   //copy lattice host array to device
-  cuda_check(cudaMemcpy(lattice,lattice_h,NDIS*N*sizeof(uint),
+  cuda_check(cudaMemcpy(lattice,lattice_h,N*NDIS*sizeof(uint),
     cudaMemcpyHostToDevice));
 
   //record success message
   logger::record("lattice array initialized");
+}
+
+//run Monte Carlo simulation
+void eamsim::run_MC_simulation()
+{
+  //copy lattice array to shuffled lattice array
+  cuda_check(cudaMemcpy(slattice,lattice,N*NDIS*sizeof(uint),
+    cudaMemcpyDeviceToDevice));
+}
+
+//initialize replica beta array
+void eamsim::init_rbeta()
+{
+  //declare auxiliary variables
+  const float bratio = pow(2.0,4/(NREP-1.0)); //beta ratio
+
+  //initialize replica beta host array
+  for (uint i_l = 0; i_l<NDIS; ++i_l) //lattice index
+  {
+    for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
+    {
+      uint i_r = NREP*i_l+i_b; //replica index
+      rbeta_h[i_r].idx = i_b;
+      rbeta_h[i_r].beta = pow(bratio,i_b)*beta;
+    }
+  }
+
+  //copy replica beta host array to device
+  cuda_check(cudaMemcpy(rbeta,rbeta_h,NREP*NDIS*sizeof(ibeta),
+    cudaMemcpyHostToDevice));
 }

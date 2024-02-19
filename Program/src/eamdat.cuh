@@ -30,11 +30,6 @@ static constexpr uint MASKES = 0x0000000f; //energy-spin index mask
 
 static constexpr uint SHIFTS = 24; //--------------------------------------------
 static constexpr uint SHIFTJ = 26; //--------------------------------------------
-// static constexpr uint SHIFT_J1 = 27;
-// static constexpr uint SHIFT_J2 = 28;
-// static constexpr uint SHIFT_J3 = 29;
-// static constexpr uint SHIFT_J4 = 30;
-// static constexpr uint SHIFT_J5 = 31;
 
 //Classes
 
