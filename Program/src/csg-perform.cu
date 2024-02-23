@@ -51,13 +51,13 @@ int main(
       check_file(inp_f,pathstr);
       sim.read_state(inp_f);
     }
-  
-    //temporary
+
+    //run Monte Carlo simulation
     pathstr = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
     pathstr += cnfs(i_s_f,2,'0')+".bin";
     out_f.open(pathstr,std::ios::binary);
     check_file(out_f,pathstr);
-    sim.write_state(out_f);
+    sim.run_MC_simulation(out_f);
   }
   catch (const error &err) //caught error
   {

@@ -8,10 +8,10 @@
 
 //Constants
 
-static constexpr uint MCSBS = 32; //MC steps between swaps
+static constexpr uint MCSBS = 32; //Monte Carlo steps between shuffles
 
 static constexpr uint NTPB = 256; //number of threads per block
-static constexpr uint NBLK = (N*NDIS+NTPB-1)/NTPB; //number of blocks
+static constexpr uint NBPG = 16; //number of blocks per grid
 
 //Aliases
 
@@ -26,13 +26,38 @@ __global__ void init_prng(
   void *vprngs, //void PRNG state array
   uint pseed) //PRNG seed
 {
-  //calculate thread index
-  uint i_t = blockIdx.x*blockDim.x+threadIdx.x; //thread index
-  if (i_t>=N*NDIS){ return;}
+  //calculate grid thread index
+  uint i_gt = blockDim.x*blockIdx.x+threadIdx.x; //grid thread index
 
   //initialize PRNG state
   prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
-  curand_init(pseed,i_t,0,&prngs[i_t]);
+  curand_init(pseed,i_gt,0,&prngs[i_gt]);
+}
+
+//rearrange lattice temperature replicas
+__global__ void rearrange(
+  uint *lattice, //lattice array
+  ibeta *rbeta, //replica beta array
+  uint *slattice) //shuffled lattice array
+{
+  //calculate grid thread index
+  uint i_gt = blockDim.x*blockIdx.x+threadIdx.x; //grid thread index
+
+  //declare auxiliary variables
+  uint smspin; //shuffled multispin
+  uint rmspin; //rearranged multispin
+
+  //update lattice array
+  for (uint i_l = 0; i_l<NDIS; ++i_l) //lattice index
+  {
+    smspin = slattice[N*i_l+i_gt];
+    rmspin = 0;
+    for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
+    {
+	    rmspin |= ((smspin>>i_b)&1)<<rbeta[NREP*i_l+i_b].idx;
+    }
+    lattice[N*i_l+i_gt] = (lattice[N*i_l+i_gt]&MASKAJ)|rmspin&MASKAS;
+  }
 }
 
 //Host Functions
@@ -48,7 +73,7 @@ eamsim::eamsim(float beta) //inverse temperature
 
   //allocate device memory
   cuda_check(cudaMalloc(&rbeta,NREP*NDIS*sizeof(ibeta)));
-  cuda_check(cudaMalloc(&vprngs,N*NDIS*sizeof(prng)));
+  cuda_check(cudaMalloc(&vprngs,NTPB*NBPG*sizeof(prng)));
   cuda_check(cudaMalloc(&slattice,N*NDIS*sizeof(uint)));
 
   //allocate host memory
@@ -58,7 +83,7 @@ eamsim::eamsim(float beta) //inverse temperature
   init_rbeta();
 
   //initialize PRNG state array
-  init_prng<<<NTPB,NBLK>>>(vprngs,time(nullptr));
+  init_prng<<<NTPB,NBPG>>>(vprngs,time(nullptr));
 
   //record success message
   logger::record("eamsim initialized");
@@ -160,11 +185,23 @@ void eamsim::init_lattice()
 }
 
 //run Monte Carlo simulation
-void eamsim::run_MC_simulation()
+void eamsim::run_MC_simulation(std::ofstream &bin_out_f) //binary output file
 {
   //copy lattice array to shuffled lattice array
   cuda_check(cudaMemcpy(slattice,lattice,N*NDIS*sizeof(uint),
     cudaMemcpyDeviceToDevice));
+
+  //Monte Carlo steps...
+
+  //rearrange lattice temperature replicas
+  rearrange<<<NTPB,NBPG>>>(lattice,rbeta,slattice);
+
+  //copy lattice array to host
+  cuda_check(cudaMemcpy(lattice_h,lattice,N*NDIS*sizeof(uint),
+    cudaMemcpyDeviceToHost));
+
+  //write state to binary file
+  write_state(bin_out_f);
 }
 
 //initialize replica beta array
@@ -178,9 +215,8 @@ void eamsim::init_rbeta()
   {
     for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
     {
-      uint i_r = NREP*i_l+i_b; //replica index
-      rbeta_h[i_r].idx = i_b;
-      rbeta_h[i_r].beta = pow(bratio,i_b)*beta;
+      rbeta_h[NREP*i_l+i_b].idx = i_b;
+      rbeta_h[NREP*i_l+i_b].beta = pow(bratio,i_b)*beta;
     }
   }
 
