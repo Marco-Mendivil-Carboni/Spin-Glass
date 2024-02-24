@@ -7,7 +7,7 @@
 
 //Structures
 
-struct ibeta //indexed beta
+struct ib_s //index-beta struct
 {
   uint idx; //index
   float beta; //inverse temperature
@@ -39,16 +39,16 @@ class eamsim : public eamdat //EA model simulation
 
   const float beta; //inverse temperature
 
-  ibeta *rbeta; //replica beta array
+  ib_s *repib; //replica index-beta array
   void *vprngs; //void PRNG state array
   uint *slattice; //shuffled lattice array
 
-  ibeta *rbeta_h; //replica beta host array
+  ib_s *repib_h; //replica index-beta host array
 
   //Functions
 
-  //initialize replica beta array
-  void init_rbeta();
+  //initialize replica index-beta array
+  void init_repib();
 };
 
 #endif //MMC_EAMSIM_H
