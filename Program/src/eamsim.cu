@@ -11,13 +11,22 @@
 static constexpr uint MCSBS = 32; //Monte Carlo steps between shuffles
 
 static constexpr uint NTPB = 256; //number of threads per block
-static constexpr uint NBPG = 16; //number of blocks per grid
+static constexpr uint NBPG = NDIS; //number of blocks per grid
 
 //Aliases
 
 using prng = curandStatePhilox4_32_10; //PRNG type
 
 //Device Functions
+
+//sequential addressing reduction
+__device__ void reduction(
+  float *a,
+  short s_a[NREP][NTPB], //shared vec
+  const uint i_bt) //block thread index
+{
+
+}
 
 //Global Functions
 
@@ -27,7 +36,7 @@ __global__ void init_prng(
   uint pseed) //PRNG seed
 {
   //calculate grid thread index
-  uint i_gt = blockDim.x*blockIdx.x+threadIdx.x; //grid thread index
+  const uint i_gt = blockDim.x*blockIdx.x+threadIdx.x; //grid thread index
 
   //initialize PRNG state
   prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
@@ -40,23 +49,29 @@ __global__ void rearrange(
   ibeta *rbeta, //replica beta array
   uint *slattice) //shuffled lattice array
 {
-  //calculate grid thread index
-  uint i_gt = blockDim.x*blockIdx.x+threadIdx.x; //grid thread index
+  //calculate indexes
+  const uint i_bt = threadIdx.x; //block thread index
+  const uint i_gb = blockIdx.x; //grid block index
 
   //declare auxiliary variables
   uint smspin; //shuffled multispin
   uint rmspin; //rearranged multispin
+  __shared__ uint s_rbeta_idx[NREP]; //shared replica beta index
+
+  //write shared replica beta index
+  if (i_bt<NREP){ s_rbeta_idx[i_bt] = rbeta[NREP*i_gb+i_bt].idx;}
+  __syncthreads();
 
   //update lattice array
-  for (uint i_l = 0; i_l<NDIS; ++i_l) //lattice index
+  for (uint i_s = i_bt; i_s<N; i_s += NTPB) //site index
   {
-    smspin = slattice[N*i_l+i_gt];
+    smspin = slattice[N*i_gb+i_s];
     rmspin = 0;
     for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
     {
-	    rmspin |= ((smspin>>i_b)&1)<<rbeta[NREP*i_l+i_b].idx;
+	    rmspin |= ((smspin>>i_b)&1)<<s_rbeta_idx[i_b];
     }
-    lattice[N*i_l+i_gt] = (lattice[N*i_l+i_gt]&MASKAJ)|rmspin&MASKAS;
+    lattice[N*i_gb+i_s] = (lattice[N*i_gb+i_s]&MASKAJ)|rmspin;
   }
 }
 
@@ -202,6 +217,9 @@ void eamsim::run_MC_simulation(std::ofstream &bin_out_f) //binary output file
 
   //write state to binary file
   write_state(bin_out_f);
+
+  //record success message
+  logger::record("simulation ended");
 }
 
 //initialize replica beta array
