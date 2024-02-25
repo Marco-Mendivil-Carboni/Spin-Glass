@@ -29,7 +29,7 @@ inline __device__ void init_prob(
   uint prob[NREP][PTABW], //probability lookup table
   const uint i_bt) //block thread index
 {
-  //...
+  //initialize all entries to 1
   if (i_bt<PTABW)
   {
     for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
@@ -42,26 +42,75 @@ inline __device__ void init_prob(
 //compute probability lookup table
 inline __device__ void compute_prob(
   uint prob[NREP][PTABW], //probability lookup table
-  float *s_rep_beta, //shared replica beta
+  float *s_rep_beta, //shared replica beta array
   const uint i_bt) //block thread index
 {
-  //...
+  //compute all possible probabilities
   if (i_bt<NPROB)
   {
     for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
     {
-      float energy = i_bt-6-H-((1.0-2.0*H)*(i_bt&1)); //...
-      prob[i_b][i_bt] = expf(2*energy*s_rep_beta[i_b])*UINT_MAX;
+      float energy = i_bt-6+H-((1+2*H)*(i_bt&1)); //spin energy
+      prob[i_b][i_bt] = expf(s_rep_beta[i_b]*2*energy)*UINT_MAX;
     }
   }
 }
 
-//gpu_shuffle...
+//shuffle lattice temperature replicas
+__device__ void shuffle(
+  void *vprngs, //void PRNG state array
+  uint *s_rep_idx, //shared replica index array
+  float *s_rep_beta, //shared replica beta array
+  float *tot_energy, //total energy array
+  const uint i_bt, //block thread index
+  const uint i_gt, //grid thread index
+  bool mode) //shuffle mode
+{
+  //declare auxiliary variables
+  uint i_0; //1st array index
+  uint i_1; //2nd array index
+  uint max_i_bt; //maximum block thread index
+  __shared__ uint s_rai[NREP]; //shared rearranged array index array
+
+  //write shared rearranged array index array
+  if (i_bt<NREP){ s_rai[s_rep_idx[i_bt]] = i_bt;}
+  __syncthreads ();
+
+  if (mode) //consider even pairs of temperature replicas
+  {
+    i_0 = s_rai[(i_bt<<1)+0]; i_1 = s_rai[(i_bt<<1)+1]; max_i_bt = NREP/2;
+  }
+  else //consider odd pairs of temperature replicas
+  {
+    i_0 = s_rai[(i_bt<<1)+1]; i_1 = s_rai[(i_bt<<1)+2]; max_i_bt = NREP/2-1;
+  }
+
+  if (i_bt<max_i_bt) //shuffle pair of temperature replicas
+  {
+    //generate random number
+    prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
+    float ran = curand_uniform(&prngs[i_gt]); //random number in (0,1]
+
+    //compute shuffle probability
+    float beta_diff = s_rep_beta[i_0]-s_rep_beta[i_1]; //beta difference
+    float energy_diff = tot_energy[i_0]-tot_energy[i_1]; //energy difference
+    float prob = expf(beta_diff*energy_diff); //shuffle probability
+
+    if (ran<prob) //accept shuffle
+    {
+      uint tmp_idx = s_rep_idx[i_0]; //temporary index
+      s_rep_idx[i_0] = s_rep_idx[i_1]; s_rep_idx[i_1] = tmp_idx;
+      float tmp_beta = s_rep_beta[i_0]; //temporary beta
+      s_rep_beta[i_0] = s_rep_beta[i_1]; s_rep_beta[i_1] = tmp_beta;
+    }
+  }
+  __syncthreads();
+}
 
 //perform skewed sequential sum reduction
 inline __device__ void sum_reduce(
-  float *lattice_energy, //total lattice energy array
-  short aenergy[NREP][NTPB], //auxiliary energy array
+  float *tot_energy, //total energy array
+  short aux_energy[NREP][NTPB], //auxiliary energy array
   const uint i_bt) //block thread index
 {
   //sum auxiliary energies for each temperature replica
@@ -70,10 +119,11 @@ inline __device__ void sum_reduce(
     int sum = 0; //sum of energies
     for (uint i_sl = 0; i_sl<NTPB; ++i_sl) //skewed loop index
     {
-      sum += aenergy[i_bt][(i_sl+i_bt)%NTPB];
+      sum += aux_energy[i_bt][(i_sl+i_bt)%NTPB];
     }
-    lattice_energy[i_bt] = sum;
+    tot_energy[i_bt] = sum;
   }
+  __syncthreads();
 }
 
 //stencil...
@@ -112,9 +162,9 @@ __global__ void rearrange(
   //declare auxiliary variables
   uint smspin; //shuffled multispin
   uint rmspin; //rearranged multispin
-  __shared__ uint s_rep_idx[NREP]; //shared replica index
+  __shared__ uint s_rep_idx[NREP]; //shared replica index array
 
-  //write shared replica index
+  //write shared replica index array
   if (i_bt<NREP){ s_rep_idx[i_bt] = repib[NREP*i_gb+i_bt].idx;}
   __syncthreads();
 

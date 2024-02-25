@@ -12,6 +12,8 @@ static constexpr uint N = L*L*L; //number of sites
 
 static constexpr uint NDIS = 256; //number of disorder realizations
 
+static constexpr uint NSEG = 6; //number of spin segments
+static constexpr uint NSPS = 4; //number of spins per segment
 static constexpr uint NREP = 24; //number of temperature replicas
 
 static constexpr uint MASKAS = 0x00ffffff; //all spins mask
@@ -20,14 +22,14 @@ static constexpr uint MASKAJ = 0xfc000000; //all coupling constants mask
 static constexpr uint MASKSJ = 0x04000000; //single coupling constant mask
 static constexpr uint MASKES = 0x0000000f; //energy-spin index mask
 
+static constexpr uint SHIFTS = 24; //--------------------------------------------
+static constexpr uint SHIFTJ = 26; //--------------------------------------------
+
 // MASKAS = 00000000111111111111111111111111
-// MASKSS = 00000000000100010001000100010001 Remove?
+// MASKSS = 00000000000100010001000100010001
 // MASKAJ = 11111100000000000000000000000000
 // MASKSJ = 00000100000000000000000000000000
 // MASKES = 00000000000000000000000000001111
-
-static constexpr uint SHIFTS = 24; //--------------------------------------------
-static constexpr uint SHIFTJ = 26; //--------------------------------------------
 
 //Classes
 
