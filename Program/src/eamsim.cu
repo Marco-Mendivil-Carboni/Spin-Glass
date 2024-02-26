@@ -16,6 +16,7 @@ static constexpr uint PTABW = 16; //probability lookup table width
 static constexpr uint MCSBS = 32; //Monte Carlo steps between shuffles
 
 static constexpr uint NTPB = 256; //number of threads per block
+static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
 static constexpr uint NBPG = NDIS; //number of blocks per grid
 
 //Aliases
@@ -26,7 +27,7 @@ using prng = curandStatePhilox4_32_10; //PRNG type
 
 //initialize probability lookup table
 inline __device__ void init_prob(
-  uint prob[NREP][PTABW], //probability lookup table
+  uint s_prob[NREP][PTABW], //shared probability lookup table
   const uint i_bt) //block thread index
 {
   //initialize all entries to 1
@@ -34,14 +35,15 @@ inline __device__ void init_prob(
   {
     for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
     {
-      prob[i_b][i_bt] = UINT_MAX;
+      s_prob[i_b][i_bt] = UINT_MAX;
     }
   }
+  __syncthreads();
 }
 
 //compute probability lookup table
 inline __device__ void compute_prob(
-  uint prob[NREP][PTABW], //probability lookup table
+  uint s_prob[NREP][PTABW], //shared probability lookup table
   float *s_rep_beta, //shared replica beta array
   const uint i_bt) //block thread index
 {
@@ -51,17 +53,18 @@ inline __device__ void compute_prob(
     for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
     {
       float energy = i_bt-6+H-((1+2*H)*(i_bt&1)); //spin energy
-      prob[i_b][i_bt] = expf(s_rep_beta[i_b]*2*energy)*UINT_MAX;
+      s_prob[i_b][i_bt] = expf(s_rep_beta[i_b]*2*energy)*UINT_MAX;
     }
   }
+  __syncthreads();
 }
 
 //shuffle lattice temperature replicas
-__device__ void shuffle(
-  void *vprngs, //void PRNG state array
+inline __device__ void shuffle(
   uint *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
   float *tot_energy, //total energy array
+  void *vprngs, //void PRNG state array
   const uint i_bt, //block thread index
   const uint i_gt, //grid thread index
   bool mode) //shuffle mode
@@ -76,7 +79,7 @@ __device__ void shuffle(
   if (i_bt<NREP){ s_rai[s_rep_idx[i_bt]] = i_bt;}
   __syncthreads ();
 
-  if (mode) //consider even pairs of temperature replicas
+  if (!mode) //consider even pairs of temperature replicas
   {
     i_0 = s_rai[(i_bt<<1)+0]; i_1 = s_rai[(i_bt<<1)+1]; max_i_bt = NREP/2;
   }
@@ -126,7 +129,120 @@ inline __device__ void sum_reduce(
   __syncthreads();
 }
 
-//stencil...
+//perform Monte Carlo steps
+inline __device__ void perform_MC_steps(
+  uint *slattice, //shuffled lattice array
+  float *s_rep_beta, //shared replica beta array
+  void *vprngs, //void PRNG state array
+  int iter) //...
+{
+  //calculate indexes
+  const uint i_gb = blockIdx.x; //grid block index
+  const uint i_bt = //block thread index
+    CBDIM.x*CBDIM.y*threadIdx.z+CBDIM.x*threadIdx.y+threadIdx.x;
+  const uint i_gt = CBDIM.x*CBDIM.y*CBDIM.z*i_gb+i_bt; //grid thread index
+
+  //declare auxiliary variables
+  __shared__ uint s_prob[NREP][PTABW]; //shared probability lookup table
+  __shared__ uint l[L][L][L]; //shared single lattice
+
+  //initilize probability lookup table
+  init_prob(s_prob,i_bt);
+
+  //compute probability lookup table
+  compute_prob(s_prob,s_rep_beta,i_bt);
+
+  // index for read/write global memory
+  int xx = (L/2*(threadIdx.y&1))+threadIdx.x;
+  int yy = (L/2*(threadIdx.z&1))+(threadIdx.y>>1);
+
+  // import lattice scratchpad
+  for (int z_offset = 0; z_offset < L; z_offset += (CBDIM.z>>1))
+  {
+    int zz = z_offset + (threadIdx.z >> 1);
+    l[zz][yy][xx] = slattice[N*i_gb + L * L * z_offset + i_bt];
+  }
+  __syncthreads();
+
+  for (int i = 0; i < iter; i++)
+  {
+    //two phases update
+    for (int run = 0; run < 2; run++)
+    {
+  	  int x0 = (threadIdx.z & 1) ^ (threadIdx.y & 1) ^ run;	// initial x
+
+  	  int x = (threadIdx.x << 1) + x0;
+  	  int xa = (x + L - 1) % L; //retarded...
+  	  int xb = (x + 1) % L; //advanced...
+
+      int y = threadIdx.y;
+      int ya = (y + L - 1) % L;
+      int yb = (y + 1) % L;
+
+  	  for (int z_offset = 0; z_offset < L; z_offset += CBDIM.z)
+      {
+  	    int z = z_offset + threadIdx.z;
+  	    int za = (z + L - 1) % L;
+  	    int zb = (z + 1) % L;
+
+        //...
+    	  uint c =  l[z][y][x]; //center
+  	    uint n0 = l[z][y][xa]; //left
+  	    uint n1 = l[z][y][xb]; //right
+  	    uint n2 = l[z][ya][x]; //up
+  	    uint n3 = l[z][yb][x]; //down
+  	    uint n4 = l[za][y][x]; //front
+  	    uint n5 = l[zb][y][x]; //back
+
+        //...
+  	    n0 = (MASKAB*((c>>(SHIFTSJ+0))&1))^n0^c;
+  	    n1 = (MASKAB*((c>>(SHIFTSJ+1))&1))^n1^c;
+  	    n2 = (MASKAB*((c>>(SHIFTSJ+2))&1))^n2^c;
+  	    n3 = (MASKAB*((c>>(SHIFTSJ+3))&1))^n3^c;
+  	    n4 = (MASKAB*((c>>(SHIFTSJ+4))&1))^n4^c;
+  	    n5 = (MASKAB*((c>>(SHIFTSJ+5))&1))^n5^c;
+
+  	    for (int s = 0; s < NSPS; s++)
+        {
+          //...
+  	      uint e = //...
+  	        ((n0>>s)&MASKSS)+
+  	        ((n1>>s)&MASKSS)+
+  	        ((n2>>s)&MASKSS)+
+  	        ((n3>>s)&MASKSS)+
+  	        ((n4>>s)&MASKSS)+
+  	        ((n5>>s)&MASKSS);
+  	      e = (e << 1) + ((c >> s) & MASKSS);
+
+          //...
+  	      uint flip = 0; //...
+    	    for (int shift = 0; shift < SHIFTMS; shift += NSPS)
+          {
+  	        uint val = s_prob[shift+s][(e>>shift)&MASKES]; //...
+            prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
+  	        uint myrand = curand(&prngs[i_gt]);	//...
+  	        flip |= (myrand<val)<<shift;
+  	      }
+
+          //flip spins
+  	      c ^= (flip << s);
+  	    }
+
+        //save new spins
+  	    l[z][y][x] = c;
+  	  }
+  	  __syncthreads();
+    }
+  }
+
+  //...
+  for (int z_offset = 0; z_offset < L; z_offset += (CBDIM.z >> 1))
+  {
+    int zz = z_offset + (threadIdx.z >> 1);
+    slattice[N*i_gb+L*L*z_offset+i_bt] = l[zz][yy][xx];
+  }
+  __syncthreads();
+}
 
 //stencil_swap...
 
@@ -138,7 +254,7 @@ __global__ void init_prng(
   uint pseed) //PRNG seed
 {
   //calculate grid thread index
-  const uint i_gt = blockDim.x*blockIdx.x+threadIdx.x; //grid thread index
+  const uint i_gt = NTPB*blockIdx.x+threadIdx.x; //grid thread index
 
   //initialize PRNG state
   prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
@@ -156,8 +272,8 @@ __global__ void rearrange(
   uint *slattice) //shuffled lattice array
 {
   //calculate indexes
-  const uint i_bt = threadIdx.x; //block thread index
   const uint i_gb = blockIdx.x; //grid block index
+  const uint i_bt = threadIdx.x; //block thread index
 
   //declare auxiliary variables
   uint smspin; //shuffled multispin
@@ -234,7 +350,7 @@ void init_multispins(
   for (uint i_s = 0; i_s<N; ++i_s) //site index
   {
     curandGenerate(gen,&ranmspin,1);
-    lattice_h[i_s] = (lattice_h[i_s]&MASKAJ)|ranmspin&MASKAS;
+    lattice_h[i_s] = (lattice_h[i_s]&MASKAJ)|(ranmspin&MASKAS);
   }
 }
 

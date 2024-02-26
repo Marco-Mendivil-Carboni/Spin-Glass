@@ -21,9 +21,10 @@ static constexpr uint MASKSS = 0x00111111; //spin segments mask
 static constexpr uint MASKAJ = 0xfc000000; //all coupling constants mask
 static constexpr uint MASKSJ = 0x04000000; //single coupling constant mask
 static constexpr uint MASKES = 0x0000000f; //energy-spin index mask
+static constexpr uint MASKAB = 0xffffffff; //all bits mask
 
-static constexpr uint SHIFTS = 24; //--------------------------------------------
-static constexpr uint SHIFTJ = 26; //--------------------------------------------
+static constexpr uint SHIFTMS = 24; //maximum spin shift
+static constexpr uint SHIFTSJ = 26; //single coupling constant shift
 
 // MASKAS = 00000000111111111111111111111111
 // MASKSS = 00000000000100010001000100010001
