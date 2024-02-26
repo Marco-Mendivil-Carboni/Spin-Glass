@@ -15,7 +15,7 @@ static constexpr uint PTABW = 16; //probability lookup table width
 
 static constexpr uint MCSBS = 32; //Monte Carlo steps between shuffles
 
-static constexpr uint NTPB = 256; //number of threads per block
+static constexpr uint NTPB = L*L; //number of threads per block
 static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
 static constexpr uint NBPG = NDIS; //number of blocks per grid
 
@@ -134,7 +134,7 @@ inline __device__ void perform_MC_steps(
   uint *slattice, //shuffled lattice array
   float *s_rep_beta, //shared replica beta array
   void *vprngs, //void PRNG state array
-  int iter) //...
+  int n_steps) //number of Monte Carlo steps
 {
   //calculate indexes
   const uint i_gb = blockIdx.x; //grid block index
@@ -143,8 +143,8 @@ inline __device__ void perform_MC_steps(
   const uint i_gt = CBDIM.x*CBDIM.y*CBDIM.z*i_gb+i_bt; //grid thread index
 
   //declare auxiliary variables
+  __shared__ uint s_slattice[L][L][L]; //shared shuffled lattice array
   __shared__ uint s_prob[NREP][PTABW]; //shared probability lookup table
-  __shared__ uint l[L][L][L]; //shared single lattice
 
   //initilize probability lookup table
   init_prob(s_prob,i_bt);
@@ -152,94 +152,94 @@ inline __device__ void perform_MC_steps(
   //compute probability lookup table
   compute_prob(s_prob,s_rep_beta,i_bt);
 
-  // index for read/write global memory
-  int xx = (L/2*(threadIdx.y&1))+threadIdx.x;
-  int yy = (L/2*(threadIdx.z&1))+(threadIdx.y>>1);
-
-  // import lattice scratchpad
-  for (int z_offset = 0; z_offset < L; z_offset += (CBDIM.z>>1))
+  //write shared shuffled lattice array
+  uint xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
+  uint yt = (L/2*(threadIdx.z&1))+(threadIdx.y>>1); //total y index
+  for (uint zt = 0; zt<L; ++zt) //total z index
   {
-    int zz = z_offset + (threadIdx.z >> 1);
-    l[zz][yy][xx] = slattice[N*i_gb + L * L * z_offset + i_bt];
+    s_slattice[zt][yt][xt] = slattice[N*i_gb+L*L*zt+i_bt];
   }
   __syncthreads();
 
-  for (int i = 0; i < iter; i++)
+  //perform all Monte Carlo steps
+  for (uint step = 0; step<n_steps; ++step) //Monte Carlo step index
   {
-    //two phases update
-    for (int run = 0; run < 2; run++)
+    //perform both phases of each update
+    for (uint phase = 0; phase<2; ++phase) //update phase index
     {
-  	  int x0 = (threadIdx.z & 1) ^ (threadIdx.y & 1) ^ run;	// initial x
-
-  	  int x = (threadIdx.x << 1) + x0;
-  	  int xa = (x + L - 1) % L; //retarded...
-  	  int xb = (x + 1) % L; //advanced...
-
-      int y = threadIdx.y;
-      int ya = (y + L - 1) % L;
-      int yb = (y + 1) % L;
-
-  	  for (int z_offset = 0; z_offset < L; z_offset += CBDIM.z)
+      //calculate shared shuffled lattice indexes
+      uint xs = (threadIdx.z&1)^(threadIdx.y&1)^phase; //starting x index
+      uint xc = xs+(threadIdx.x<<1); //centered x index
+      uint xr = (xc+L-1)%L; //retarded x index
+      uint xa = (xc+1)%L; //advanced x index
+      uint yc = threadIdx.y; //centered y index
+      uint yr = (yc+L-1)%L; //retarded y index
+      uint ya = (yc+1)%L; //advanced y index
+      for (uint oz = 0; oz<L; oz += CBDIM.z) //z index offset
       {
-  	    int z = z_offset + threadIdx.z;
-  	    int za = (z + L - 1) % L;
-  	    int zb = (z + 1) % L;
+        uint zc = oz+threadIdx.z; //centered z index
+        uint zr = (zc+L-1)%L; //retarded z index
+        uint za = (zc+1)%L; //advanced z index
 
-        //...
-    	  uint c =  l[z][y][x]; //center
-  	    uint n0 = l[z][y][xa]; //left
-  	    uint n1 = l[z][y][xb]; //right
-  	    uint n2 = l[z][ya][x]; //up
-  	    uint n3 = l[z][yb][x]; //down
-  	    uint n4 = l[za][y][x]; //front
-  	    uint n5 = l[zb][y][x]; //back
+        //compute interactions with first neighbours
+        uint cmspin = s_slattice[zc][yc][xc]; //centered multispin
+        uint int_0 = s_slattice[zc][yc][xr]; //interaction 0 (left)
+        uint int_1 = s_slattice[zc][yc][xa]; //interaction 1 (right)
+        uint int_2 = s_slattice[zc][yr][xc]; //interaction 2 (down)
+        uint int_3 = s_slattice[zc][ya][xc]; //interaction 3 (up)
+        uint int_4 = s_slattice[zr][yc][xc]; //interaction 4 (back)
+        uint int_5 = s_slattice[za][yc][xc]; //interaction 5 (front)
+        int_0 = (MASKAB*((cmspin>>(SHIFTSJ+0))&1))^int_0^cmspin;
+        int_1 = (MASKAB*((cmspin>>(SHIFTSJ+1))&1))^int_1^cmspin;
+        int_2 = (MASKAB*((cmspin>>(SHIFTSJ+2))&1))^int_2^cmspin;
+        int_3 = (MASKAB*((cmspin>>(SHIFTSJ+3))&1))^int_3^cmspin;
+        int_4 = (MASKAB*((cmspin>>(SHIFTSJ+4))&1))^int_4^cmspin;
+        int_5 = (MASKAB*((cmspin>>(SHIFTSJ+5))&1))^int_5^cmspin;
 
-        //...
-  	    n0 = (MASKAB*((c>>(SHIFTSJ+0))&1))^n0^c;
-  	    n1 = (MASKAB*((c>>(SHIFTSJ+1))&1))^n1^c;
-  	    n2 = (MASKAB*((c>>(SHIFTSJ+2))&1))^n2^c;
-  	    n3 = (MASKAB*((c>>(SHIFTSJ+3))&1))^n3^c;
-  	    n4 = (MASKAB*((c>>(SHIFTSJ+4))&1))^n4^c;
-  	    n5 = (MASKAB*((c>>(SHIFTSJ+5))&1))^n5^c;
-
-  	    for (int s = 0; s < NSPS; s++)
+        //flip every spin in the multispin
+        for (uint i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
         {
-          //...
-  	      uint e = //...
-  	        ((n0>>s)&MASKSS)+
-  	        ((n1>>s)&MASKSS)+
-  	        ((n2>>s)&MASKSS)+
-  	        ((n3>>s)&MASKSS)+
-  	        ((n4>>s)&MASKSS)+
-  	        ((n5>>s)&MASKSS);
-  	      e = (e << 1) + ((c >> s) & MASKSS);
+          //compute energy-spin index
+          uint es_idx = //energy-spin index
+            ((int_0>>i_ss)&MASKSS)+
+            ((int_1>>i_ss)&MASKSS)+
+            ((int_2>>i_ss)&MASKSS)+
+            ((int_3>>i_ss)&MASKSS)+
+            ((int_4>>i_ss)&MASKSS)+
+            ((int_5>>i_ss)&MASKSS);
+          es_idx = (es_idx<<1)+((cmspin>>i_ss)&MASKSS);
 
-          //...
-  	      uint flip = 0; //...
-    	    for (int shift = 0; shift < SHIFTMS; shift += NSPS)
+          //compute spin flips
+          uint flip = 0; //spin flips
+          for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
           {
-  	        uint val = s_prob[shift+s][(e>>shift)&MASKES]; //...
+            //generate random unsigned integer
             prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
-  	        uint myrand = curand(&prngs[i_gt]);	//...
-  	        flip |= (myrand<val)<<shift;
-  	      }
+            uint ran = curand(&prngs[i_gt]); //random unsigned integer
+
+            //compute flip probability
+            uint prob = //flip probability
+              s_prob[shift+i_ss][(es_idx>>shift)&MASKES];
+
+            //update spin flips
+            flip |= (ran<prob)<<shift;
+          }
 
           //flip spins
-  	      c ^= (flip << s);
-  	    }
+          cmspin ^= (flip<<i_ss);
+        }
 
-        //save new spins
-  	    l[z][y][x] = c;
-  	  }
-  	  __syncthreads();
+        //update shared shuffled lattice array
+        s_slattice[zc][yc][xc] = cmspin;
+      }
+      __syncthreads();
     }
   }
 
-  //...
-  for (int z_offset = 0; z_offset < L; z_offset += (CBDIM.z >> 1))
+  //write shuffled lattice array
+  for (uint zt = 0; zt<L; ++zt) //total z index
   {
-    int zz = z_offset + (threadIdx.z >> 1);
-    slattice[N*i_gb+L*L*z_offset+i_bt] = l[zz][yy][xx];
+    slattice[N*i_gb+L*L*zt+i_bt] = s_slattice[zt][yt][xt];
   }
   __syncthreads();
 }
@@ -291,7 +291,7 @@ __global__ void rearrange(
     rmspin = 0;
     for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
     {
-	    rmspin |= ((smspin>>i_b)&1)<<s_rep_idx[i_b];
+      rmspin |= ((smspin>>i_b)&1)<<s_rep_idx[i_b];
     }
     lattice[N*i_gb+i_s] = (lattice[N*i_gb+i_s]&MASKAJ)|rmspin;
   }
@@ -383,14 +383,14 @@ void init_coupling_constants(
       uint yr = (ya+L-1)%L; //retarded y index
       for (uint za = 0; za<L; ++za) //advanced z index
       {
-	      uint zr = (za+L-1)%L; //retarded z index
-	      uint J = //site's coupling constants
-	        (MASKSJ<<0)*Jx[L*L*za+L*ya+xr]|
-	        (MASKSJ<<1)*Jx[L*L*za+L*ya+xa]|
-	        (MASKSJ<<2)*Jy[L*L*za+L*yr+xa]|
-	        (MASKSJ<<3)*Jy[L*L*za+L*ya+xa]|
-	        (MASKSJ<<4)*Jz[L*L*zr+L*ya+xa]|
-	        (MASKSJ<<5)*Jz[L*L*za+L*ya+xa];
+        uint zr = (za+L-1)%L; //retarded z index
+        uint J = //site's coupling constants
+          (MASKSJ<<0)*Jx[L*L*za+L*ya+xr]|
+          (MASKSJ<<1)*Jx[L*L*za+L*ya+xa]|
+          (MASKSJ<<2)*Jy[L*L*za+L*yr+xa]|
+          (MASKSJ<<3)*Jy[L*L*za+L*ya+xa]|
+          (MASKSJ<<4)*Jz[L*L*zr+L*ya+xa]|
+          (MASKSJ<<5)*Jz[L*L*za+L*ya+xa];
         uint i_s = L*L*za+L*ya+xa; //site index
         lattice_h[i_s] = J|(lattice_h[i_s]&MASKAS);
       }
