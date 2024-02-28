@@ -169,7 +169,7 @@ inline __device__ void perform_MC_steps(
     {
       //calculate shared shuffled lattice indexes
       uint xs = (threadIdx.z&1)^(threadIdx.y&1)^phase; //starting x index
-      uint xc = xs+(threadIdx.x<<1); //centered x index
+      uint xc = (threadIdx.x<<1)+xs; //centered x index
       uint xr = (xc+L-1)%L; //retarded x index
       uint xa = (xc+1)%L; //advanced x index
       uint yc = threadIdx.y; //centered y index
@@ -244,7 +244,136 @@ inline __device__ void perform_MC_steps(
   __syncthreads();
 }
 
-//stencil_swap...
+//perform Parallel Tempering shuffle
+inline __device__ void perform_PT_shuffle(
+  uint *slattice, //shuffled lattice array
+  uint *s_rep_idx, //shared replica index array
+  float *s_rep_beta, //shared replica beta array
+  float *tot_energy, //total energy array
+  void *vprngs, //void PRNG state array
+  bool mode) //shuffle mode
+{
+  //calculate indexes
+  const uint i_gb = blockIdx.x; //grid block index
+  const uint i_bt = //block thread index
+    CBDIM.x*CBDIM.y*threadIdx.z+CBDIM.x*threadIdx.y+threadIdx.x;
+  const uint i_gt = CBDIM.x*CBDIM.y*CBDIM.z*i_gb+i_bt; //grid thread index
+
+  //declare auxiliary variables
+  __shared__ uint s_slattice[L][L][L]; //shared shuffled lattice array
+  __shared__ short aux_energy[NREP][NTPB]; //auxiliary energy array
+  __shared__ float tot_ext_energy[NREP]; //total external energy array
+
+  //write shared shuffled lattice array
+  uint xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
+  uint yt = (L/2*(threadIdx.z&1))+(threadIdx.y>>1); //total y index
+  for (uint zt = 0; zt<L; ++zt) //total z index
+  {
+    s_slattice[zt][yt][xt] = slattice[N*i_gb+L*L*zt+i_bt];
+  }
+  __syncthreads();
+
+  //initialize auxiliary energy array to 0
+  for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
+  {
+    aux_energy[i_b][i_bt] = 0;
+  }
+  __syncthreads();
+
+  //calculate shared shuffled lattice indexes
+  uint xs = (threadIdx.z&1)^(threadIdx.y&1); //starting x index
+  uint xc = (threadIdx.x<<1)+xs; //centered x index
+  uint xa = xc-2*xs+1; //alternative x index
+  uint xr = (xc+L-1)%L; //retarded x index
+  uint xa = (xc+1)%L; //advanced x index
+  uint yc = threadIdx.y; //centered y index
+  uint yr = (yc+L-1)%L; //retarded y index
+  uint ya = (yc+1)%L; //advanced y index
+  for (uint oz = 0; oz<L; oz += CBDIM.z) //z index offset
+  {
+    uint zc = oz+threadIdx.z; //centered z index
+    uint zr = (zc+L-1)%L; //retarded z index
+    uint za = (zc+1)%L; //advanced z index
+
+    //compute interactions with first neighbours
+    uint cmspin = s_slattice[zc][yc][xc]; //centered multispin
+    uint int_0 = s_slattice[zc][yc][xr]; //interaction 0 (left)
+    uint int_1 = s_slattice[zc][yc][xa]; //interaction 1 (right)
+    uint int_2 = s_slattice[zc][yr][xc]; //interaction 2 (down)
+    uint int_3 = s_slattice[zc][ya][xc]; //interaction 3 (up)
+    uint int_4 = s_slattice[zr][yc][xc]; //interaction 4 (back)
+    uint int_5 = s_slattice[za][yc][xc]; //interaction 5 (front)
+    int_0 = (MASKAB*((cmspin>>(SHIFTSJ+0))&1))^int_0^cmspin;
+    int_1 = (MASKAB*((cmspin>>(SHIFTSJ+1))&1))^int_1^cmspin;
+    int_2 = (MASKAB*((cmspin>>(SHIFTSJ+2))&1))^int_2^cmspin;
+    int_3 = (MASKAB*((cmspin>>(SHIFTSJ+3))&1))^int_3^cmspin;
+    int_4 = (MASKAB*((cmspin>>(SHIFTSJ+4))&1))^int_4^cmspin;
+    int_5 = (MASKAB*((cmspin>>(SHIFTSJ+5))&1))^int_5^cmspin;
+
+    //add energy indexes to auxiliary energy array
+    for (uint i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
+    {
+      uint e_idx = //energy index
+        ((int_0>>i_ss)&MASKSS)+
+        ((int_1>>i_ss)&MASKSS)+
+        ((int_2>>i_ss)&MASKSS)+
+        ((int_3>>i_ss)&MASKSS)+
+        ((int_4>>i_ss)&MASKSS)+
+        ((int_5>>i_ss)&MASKSS);
+	    for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
+      {
+	      aux_energy[shift+i_ss][i_bt] += (e_idx>>shift)&MASKES;
+	    }
+    }
+  }
+  __syncthreads();
+
+  //perform sum reduction of energy indexes
+  sum_reduce(tot_energy,aux_energy,i_bt);
+
+  //reset auxiliary energy array to 0
+  for (uint i_b = 0; i_b<NREP; ++i_b) //beta index
+  {
+    aux_energy[i_b][i_bt] = 0;
+  }
+  __syncthreads();
+
+  //calculate shared shuffled lattice indexes
+  for (uint oz = 0; oz<L; oz += CBDIM.z) //z index offset
+  {
+    uint zc = oz+threadIdx.z; //centered z index
+
+    //read lattice multispins
+    uint cmpsin = s_slattice[zc][yc][xc]; //centered multispin
+    uint ampsin = s_slattice[zc][yc][xa]; //alternative multispin
+
+    //add spin indexes to auxiliary energy array
+    for (uint i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
+    {
+	    for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
+      {
+	      uint i_b = shift+i_ss; //beta index
+	      aux_energy[i_b][i_bt] += ((cmpsin>>i_b)&1)+((ampsin>>i_b)&1);
+	    }
+    }
+  }
+  __syncthreads();
+
+  //perform sum reduction of spin indexes
+  sum_reduce(tot_ext_energy,aux_energy,i_bt);
+
+  //shift both energies to their physical value and add them
+  if (i_bt<NREP)
+  {
+    tot_energy[i_bt] = 2*tot_energy[i_bt]-6*(N/2);
+    tot_ext_energy[i_bt] = 2*tot_ext_energy[i_bt]-1*N;
+    tot_energy[i_bt] = tot_energy[i_bt]+H*tot_ext_energy[i_bt];
+  }
+  __syncthreads();
+
+  //shuffle lattice temperature replicas
+  shuffle(s_rep_idx,s_rep_beta,tot_energy,vprngs,i_bt,i_gt,mode);
+}
 
 //Global Functions
 
