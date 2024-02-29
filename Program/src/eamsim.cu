@@ -579,6 +579,16 @@ void eamsim::init_lattice()
   logger::record("lattice array initialized");
 }
 
+//read last state from binary file
+void eamsim::read_last_state(std::ifstream &bin_inp_f) //binary input file
+{
+  //read all states in the input file
+  for (uint i_m = 0; i_m<(SPFILE/SBMEAS); ++i_m) //measurement index
+  {
+    read_state(bin_inp_f);
+  }
+}
+
 //run whole simulation
 void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 {

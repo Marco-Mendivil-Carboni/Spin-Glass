@@ -49,7 +49,7 @@ int main(
       pathstr += cnfs(i_s_f-1,2,'0')+".bin";
       inp_f.open(pathstr,std::ios::binary);
       check_file(inp_f,pathstr);
-      sim.read_state(inp_f); //change this to read last state ...................
+      sim.read_last_state(inp_f);
       inp_f.close();
     }
 

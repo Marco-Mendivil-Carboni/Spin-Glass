@@ -36,6 +36,9 @@ class eamsim : public eamdat //EA model simulation
   //initialize lattice array
   void init_lattice();
 
+  //read last state from binary file
+  void read_last_state(std::ifstream &bin_inp_f); //binary input file
+
   //run whole simulation
   void run_simulation(std::ofstream &bin_out_f); //binary output file
 
