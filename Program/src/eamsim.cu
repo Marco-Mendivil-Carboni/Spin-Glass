@@ -13,7 +13,9 @@ static constexpr float H = 0.0; //external magnetic field
 static constexpr uint NPROB = 14; //number of possible probabilities
 static constexpr uint PTABW = 16; //probability lookup table width
 
-static constexpr uint MCSBS = 32; //Monte Carlo steps between shuffles
+static constexpr uint SBSHFL = 32; //Monte Carlo steps between shuffles
+static constexpr uint SBMEAS = 2048; //Monte Carlo steps between measurements
+static constexpr uint SPFILE = 262144; //Monte Carlo steps per file
 
 static constexpr uint NTPB = L*L; //number of threads per block
 static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
@@ -283,9 +285,9 @@ inline __device__ void perform_PT_shuffle(
   //calculate shared shuffled lattice indexes
   uint xs = (threadIdx.z&1)^(threadIdx.y&1); //starting x index
   uint xc = (threadIdx.x<<1)+xs; //centered x index
-  uint xa = xc-2*xs+1; //alternative x index
   uint xr = (xc+L-1)%L; //retarded x index
   uint xa = (xc+1)%L; //advanced x index
+  uint xm = xc-2*xs+1; //matching x index
   uint yc = threadIdx.y; //centered y index
   uint yr = (yc+L-1)%L; //retarded y index
   uint ya = (yc+1)%L; //advanced y index
@@ -320,10 +322,10 @@ inline __device__ void perform_PT_shuffle(
         ((int_3>>i_ss)&MASKSS)+
         ((int_4>>i_ss)&MASKSS)+
         ((int_5>>i_ss)&MASKSS);
-	    for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
+      for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
       {
-	      aux_energy[shift+i_ss][i_bt] += (e_idx>>shift)&MASKES;
-	    }
+        aux_energy[shift+i_ss][i_bt] += (e_idx>>shift)&MASKES;
+      }
     }
   }
   __syncthreads();
@@ -345,16 +347,16 @@ inline __device__ void perform_PT_shuffle(
 
     //read lattice multispins
     uint cmpsin = s_slattice[zc][yc][xc]; //centered multispin
-    uint ampsin = s_slattice[zc][yc][xa]; //alternative multispin
+    uint mmpsin = s_slattice[zc][yc][xm]; //matching multispin
 
     //add spin indexes to auxiliary energy array
     for (uint i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
     {
-	    for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
+      for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
       {
-	      uint i_b = shift+i_ss; //beta index
-	      aux_energy[i_b][i_bt] += ((cmpsin>>i_b)&1)+((ampsin>>i_b)&1);
-	    }
+        uint i_b = shift+i_ss; //beta index
+        aux_energy[i_b][i_bt] += ((cmpsin>>i_b)&1)+((mmpsin>>i_b)&1);
+      }
     }
   }
   __syncthreads();
@@ -390,9 +392,45 @@ __global__ void init_prng(
   curand_init(pseed,i_gt,0,&prngs[i_gt]);
 }
 
-//kernel_warmup...
+//run simulation section between measurements
+__global__ void run_simulation_section(
+  uint *slattice, //shuffled lattice array
+  ib_s *repib, //replica index-beta array
+  void *vprngs) //void PRNG state array
+{
+  //calculate indexes
+  const uint i_gb = blockIdx.x; //grid block index
+  const uint i_bt = //block thread index
+    CBDIM.x*CBDIM.y*threadIdx.z+CBDIM.x*threadIdx.y+threadIdx.x;
 
-//kernel_swap...
+  //declare auxiliary variables
+  __shared__ uint s_rep_idx[NREP]; //shared replica index array
+  __shared__ float s_rep_beta[NREP]; //shared replica beta array
+  __shared__ float tot_energy[NREP]; //total energy array
+
+  //write shared replica index and beta arrays
+  if (i_bt<NREP)
+  {
+    s_rep_idx[i_bt] = repib[NREP*i_gb+i_bt].idx;
+    s_rep_beta[i_bt] = repib[NREP*i_gb+i_bt].beta;
+  }
+  __syncthreads();
+
+  //perform Parallel Tempering shuffles and Monte Carlo steps
+  for (uint step = 0; step<SBMEAS; step += SBSHFL) //Monte Carlo step index
+  {
+    bool mode = (step/SBSHFL)&1; //shuffle mode
+    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,tot_energy,vprngs,mode);
+    perform_MC_steps(slattice,s_rep_beta,vprngs,SBSHFL);
+  }
+
+  //update replica index-beta array
+  if (i_bt<NREP)
+  {
+    repib[NREP*i_gb+i_bt].idx = s_rep_idx[i_bt];
+    repib[NREP*i_gb+i_bt].beta = s_rep_beta[i_bt];
+  }
+}
 
 //rearrange lattice temperature replicas
 __global__ void rearrange(
@@ -550,24 +588,29 @@ void eamsim::init_lattice()
   logger::record("lattice array initialized");
 }
 
-//run Monte Carlo simulation
-void eamsim::run_MC_simulation(std::ofstream &bin_out_f) //binary output file
+//run whole simulation
+void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 {
   //copy lattice array to shuffled lattice array
   cuda_check(cudaMemcpy(slattice,lattice,N*NDIS*sizeof(uint),
     cudaMemcpyDeviceToDevice));
 
-  //Monte Carlo steps...
+  //run whole simulation
+  for (uint step = 0; step<SPFILE; step += SBMEAS) //Monte Carlo step index
+  {
+    //run simulation section between measurements
+    run_simulation_section<<<CBDIM,NBPG>>>(slattice,repib,vprngs);
 
-  //rearrange lattice temperature replicas
-  rearrange<<<NTPB,NBPG>>>(lattice,repib,slattice);
+    //rearrange lattice temperature replicas
+    rearrange<<<NTPB,NBPG>>>(lattice,repib,slattice);
 
-  //copy lattice array to host
-  cuda_check(cudaMemcpy(lattice_h,lattice,N*NDIS*sizeof(uint),
-    cudaMemcpyDeviceToHost));
+    //copy lattice array to host
+    cuda_check(cudaMemcpy(lattice_h,lattice,N*NDIS*sizeof(uint),
+      cudaMemcpyDeviceToHost));
 
-  //write state to binary file
-  write_state(bin_out_f);
+    //write state to binary file
+    write_state(bin_out_f);
+  }
 
   //record success message
   logger::record("simulation ended");

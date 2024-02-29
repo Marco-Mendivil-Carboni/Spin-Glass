@@ -30,8 +30,8 @@ class eamsim : public eamdat //EA model simulation
   //initialize lattice array
   void init_lattice();
 
-  //run Monte Carlo simulation
-  void run_MC_simulation(std::ofstream &bin_out_f); //binary output file
+  //run whole simulation
+  void run_simulation(std::ofstream &bin_out_f); //binary output file
 
   private:
 

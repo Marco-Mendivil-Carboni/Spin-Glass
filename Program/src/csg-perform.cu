@@ -57,7 +57,7 @@ int main(
     pathstr += cnfs(i_s_f,2,'0')+".bin";
     out_f.open(pathstr,std::ios::binary);
     check_file(out_f,pathstr);
-    sim.run_MC_simulation(out_f);
+    sim.run_simulation(out_f);
   }
   catch (const error &err) //caught error
   {
