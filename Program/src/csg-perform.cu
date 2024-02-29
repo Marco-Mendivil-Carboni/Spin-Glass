@@ -49,7 +49,8 @@ int main(
       pathstr += cnfs(i_s_f-1,2,'0')+".bin";
       inp_f.open(pathstr,std::ios::binary);
       check_file(inp_f,pathstr);
-      sim.read_state(inp_f);
+      sim.read_state(inp_f); //change this to read last state ...................
+      inp_f.close();
     }
 
     //run Monte Carlo simulation
@@ -58,6 +59,7 @@ int main(
     out_f.open(pathstr,std::ios::binary);
     check_file(out_f,pathstr);
     sim.run_simulation(out_f);
+    out_f.close();
   }
   catch (const error &err) //caught error
   {

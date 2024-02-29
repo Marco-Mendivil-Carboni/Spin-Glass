@@ -4,8 +4,6 @@
 
 #include <time.h> //time utilities library
 
-#include <curand_kernel.h> //cuRAND device functions
-
 //Constants
 
 static constexpr float H = 0.0; //external magnetic field
@@ -20,10 +18,6 @@ static constexpr uint SPFILE = 262144; //Monte Carlo steps per file
 static constexpr uint NTPB = L*L; //number of threads per block
 static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
 static constexpr uint NBPG = NDIS; //number of blocks per grid
-
-//Aliases
-
-using prng = curandStatePhilox4_32_10; //PRNG type
 
 //Device Functions
 
@@ -66,7 +60,7 @@ inline __device__ void shuffle(
   uint *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
   float *tot_energy, //total energy array
-  void *vprngs, //void PRNG state array
+  prng *prngs, //PRNG state array
   const uint i_bt, //block thread index
   const uint i_gt, //grid thread index
   bool mode) //shuffle mode
@@ -93,7 +87,6 @@ inline __device__ void shuffle(
   if (i_bt<max_i_bt) //shuffle pair of temperature replicas
   {
     //generate random number
-    prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
     float ran = curand_uniform(&prngs[i_gt]); //random number in (0,1]
 
     //compute shuffle probability
@@ -135,7 +128,7 @@ inline __device__ void sum_reduce(
 inline __device__ void perform_MC_steps(
   uint *slattice, //shuffled lattice array
   float *s_rep_beta, //shared replica beta array
-  void *vprngs, //void PRNG state array
+  prng *prngs, //PRNG state array
   int n_steps) //number of Monte Carlo steps
 {
   //calculate indexes
@@ -216,7 +209,6 @@ inline __device__ void perform_MC_steps(
           for (uint shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
           {
             //generate random unsigned integer
-            prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
             uint ran = curand(&prngs[i_gt]); //random unsigned integer
 
             //compute flip probability
@@ -252,7 +244,7 @@ inline __device__ void perform_PT_shuffle(
   uint *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
   float *tot_energy, //total energy array
-  void *vprngs, //void PRNG state array
+  prng *prngs, //PRNG state array
   bool mode) //shuffle mode
 {
   //calculate indexes
@@ -374,21 +366,20 @@ inline __device__ void perform_PT_shuffle(
   __syncthreads();
 
   //shuffle lattice temperature replicas
-  shuffle(s_rep_idx,s_rep_beta,tot_energy,vprngs,i_bt,i_gt,mode);
+  shuffle(s_rep_idx,s_rep_beta,tot_energy,prngs,i_bt,i_gt,mode);
 }
 
 //Global Functions
 
 //initialize PRNG state array
 __global__ void init_prng(
-  void *vprngs, //void PRNG state array
+  prng *prngs, //PRNG state array
   uint pseed) //PRNG seed
 {
   //calculate grid thread index
   const uint i_gt = NTPB*blockIdx.x+threadIdx.x; //grid thread index
 
   //initialize PRNG state
-  prng *prngs = static_cast<prng *>(vprngs); //PRNG state array
   curand_init(pseed,i_gt,0,&prngs[i_gt]);
 }
 
@@ -396,7 +387,7 @@ __global__ void init_prng(
 __global__ void run_simulation_section(
   uint *slattice, //shuffled lattice array
   ib_s *repib, //replica index-beta array
-  void *vprngs) //void PRNG state array
+  prng *prngs) //PRNG state array
 {
   //calculate indexes
   const uint i_gb = blockIdx.x; //grid block index
@@ -420,8 +411,8 @@ __global__ void run_simulation_section(
   for (uint step = 0; step<SBMEAS; step += SBSHFL) //Monte Carlo step index
   {
     bool mode = (step/SBSHFL)&1; //shuffle mode
-    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,tot_energy,vprngs,mode);
-    perform_MC_steps(slattice,s_rep_beta,vprngs,SBSHFL);
+    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,tot_energy,prngs,mode);
+    perform_MC_steps(slattice,s_rep_beta,prngs,SBSHFL);
   }
 
   //update replica index-beta array
@@ -477,7 +468,7 @@ eamsim::eamsim(float beta) //inverse temperature
 
   //allocate device memory
   cuda_check(cudaMalloc(&repib,NREP*NDIS*sizeof(ib_s)));
-  cuda_check(cudaMalloc(&vprngs,NTPB*NBPG*sizeof(prng)));
+  cuda_check(cudaMalloc(&prngs,NTPB*NBPG*sizeof(prng)));
   cuda_check(cudaMalloc(&slattice,N*NDIS*sizeof(uint)));
 
   //allocate host memory
@@ -487,7 +478,7 @@ eamsim::eamsim(float beta) //inverse temperature
   init_repib();
 
   //initialize PRNG state array
-  init_prng<<<NTPB,NBPG>>>(vprngs,time(nullptr));
+  init_prng<<<NTPB,NBPG>>>(prngs,time(nullptr));
 
   //record success message
   logger::record("eamsim initialized");
@@ -498,7 +489,7 @@ eamsim::~eamsim()
 {
   //deallocate device memory
   cuda_check(cudaFree(repib));
-  cuda_check(cudaFree(vprngs));
+  cuda_check(cudaFree(prngs));
   cuda_check(cudaFree(slattice));
 
   //deallocate host memory
@@ -598,11 +589,14 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
   //run whole simulation
   for (uint step = 0; step<SPFILE; step += SBMEAS) //Monte Carlo step index
   {
+    //show simulation progress
+    logger::show_prog_pc(100.0*step/SPFILE);
+
     //run simulation section between measurements
-    run_simulation_section<<<CBDIM,NBPG>>>(slattice,repib,vprngs);
+    run_simulation_section<<<NBPG,CBDIM>>>(slattice,repib,prngs);
 
     //rearrange lattice temperature replicas
-    rearrange<<<NTPB,NBPG>>>(lattice,repib,slattice);
+    rearrange<<<NBPG,NTPB>>>(lattice,repib,slattice);
 
     //copy lattice array to host
     cuda_check(cudaMemcpy(lattice_h,lattice,N*NDIS*sizeof(uint),
@@ -620,7 +614,7 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 void eamsim::init_repib()
 {
   //declare auxiliary variables
-  const float bratio = pow(2.0,4/(NREP-1.0)); //beta ratio
+  const float bratio = pow(2.0,-4/(NREP-1.0)); //beta ratio
 
   //initialize replica index-beta host array
   for (uint i_l = 0; i_l<NDIS; ++i_l) //lattice index

@@ -5,6 +5,12 @@
 
 #include "eamdat.cuh" //EA model data
 
+#include <curand_kernel.h> //cuRAND device functions
+
+//Aliases
+
+using prng = curandState; //PRNG type
+
 //Structures
 
 struct ib_s //index-beta struct
@@ -40,7 +46,7 @@ class eamsim : public eamdat //EA model simulation
   const float beta; //inverse temperature
 
   ib_s *repib; //replica index-beta array
-  void *vprngs; //void PRNG state array
+  prng *prngs; //PRNG state array
   uint *slattice; //shuffled lattice array
 
   ib_s *repib_h; //replica index-beta host array
