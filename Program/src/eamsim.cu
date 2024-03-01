@@ -6,8 +6,6 @@
 
 //Constants
 
-static constexpr float H = 0.0; //external magnetic field
-
 static constexpr uint NPROB = 14; //number of possible probabilities
 static constexpr uint PTABW = 16; //probability lookup table width
 
@@ -41,6 +39,7 @@ inline __device__ void init_prob(
 inline __device__ void compute_prob(
   uint s_prob[NREP][PTABW], //shared probability lookup table
   float *s_rep_beta, //shared replica beta array
+  const float H, //external magnetic field
   const uint i_bt) //block thread index
 {
   //compute all possible probabilities
@@ -128,6 +127,7 @@ inline __device__ void sum_reduce(
 inline __device__ void perform_MC_steps(
   uint *slattice, //shuffled lattice array
   float *s_rep_beta, //shared replica beta array
+  const float H, //external magnetic field
   prng *prngs, //PRNG state array
   int n_steps) //number of Monte Carlo steps
 {
@@ -145,7 +145,7 @@ inline __device__ void perform_MC_steps(
   init_prob(s_prob,i_bt);
 
   //compute probability lookup table
-  compute_prob(s_prob,s_rep_beta,i_bt);
+  compute_prob(s_prob,s_rep_beta,H,i_bt);
 
   //write shared shuffled lattice array
   uint xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
@@ -243,6 +243,7 @@ inline __device__ void perform_PT_shuffle(
   uint *slattice, //shuffled lattice array
   uint *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
+  const float H, //external magnetic field
   float *tot_energy, //total energy array
   prng *prngs, //PRNG state array
   bool mode) //shuffle mode
@@ -387,6 +388,7 @@ __global__ void init_prng(
 __global__ void run_simulation_section(
   uint *slattice, //shuffled lattice array
   ib_s *repib, //replica index-beta array
+  const float H, //external magnetic field
   prng *prngs) //PRNG state array
 {
   //calculate indexes
@@ -411,8 +413,8 @@ __global__ void run_simulation_section(
   for (uint step = 0; step<SBMEAS; step += SBSHFL) //Monte Carlo step index
   {
     bool mode = (step/SBSHFL)&1; //shuffle mode
-    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,tot_energy,prngs,mode);
-    perform_MC_steps(slattice,s_rep_beta,prngs,SBSHFL);
+    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,H,tot_energy,prngs,mode);
+    perform_MC_steps(slattice,s_rep_beta,H,prngs,SBSHFL);
   }
 
   //update replica index-beta array
@@ -458,13 +460,18 @@ __global__ void rearrange(
 //Host Functions
 
 //EA model simulation constructor
-eamsim::eamsim(float beta) //inverse temperature
+eamsim::eamsim(
+  float beta, //inverse temperature
+  float H) //external magnetic field
   : eamdat()
   , beta {beta}
+  , H {H}
 {
   //check parameters
   if (!(0.125<=beta&&beta<=8.0)){ throw error("beta out of range");}
+  if (!(-8.0<=H&&H<=8.0)){ throw error("H out of range");}
   logger::record("beta = "+cnfs(beta,5,'0',3));
+  logger::record("H = "+cnfs(H,5,'0',3));
 
   //allocate device memory
   cuda_check(cudaMalloc(&repib,NREP*NDIS*sizeof(ib_s)));
@@ -478,7 +485,7 @@ eamsim::eamsim(float beta) //inverse temperature
   init_repib();
 
   //initialize PRNG state array
-  init_prng<<<NTPB,NBPG>>>(prngs,time(nullptr));
+  init_prng<<<NBPG,NTPB>>>(prngs,time(nullptr));
 
   //record success message
   logger::record("eamsim initialized");
@@ -582,7 +589,6 @@ void eamsim::init_lattice()
 //read last state from binary file
 void eamsim::read_last_state(std::ifstream &bin_inp_f) //binary input file
 {
-  //read all states in the input file
   for (uint i_m = 0; i_m<(SPFILE/SBMEAS); ++i_m) //measurement index
   {
     read_state(bin_inp_f);
@@ -603,7 +609,7 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
     logger::show_prog_pc(100.0*step/SPFILE);
 
     //run simulation section between measurements
-    run_simulation_section<<<NBPG,CBDIM>>>(slattice,repib,prngs);
+    run_simulation_section<<<NBPG,CBDIM>>>(slattice,repib,H,prngs);
 
     //rearrange lattice temperature replicas
     rearrange<<<NBPG,NTPB>>>(lattice,repib,slattice);

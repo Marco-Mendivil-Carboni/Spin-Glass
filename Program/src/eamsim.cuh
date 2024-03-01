@@ -28,7 +28,9 @@ class eamsim : public eamdat //EA model simulation
   //Functions
 
   //EA model simulation constructor
-  eamsim(float beta); //inverse temperature
+  eamsim(
+    float beta, //inverse temperature
+    float H); //external magnetic field
 
   //EA model simulation destructor
   ~eamsim();
@@ -47,6 +49,7 @@ class eamsim : public eamdat //EA model simulation
   //Parameters and Variables
 
   const float beta; //inverse temperature
+  const float H; //external magnetic field
 
   ib_s *repib; //replica index-beta array
   prng *prngs; //PRNG state array
