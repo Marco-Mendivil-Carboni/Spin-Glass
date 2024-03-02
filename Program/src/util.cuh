@@ -12,7 +12,7 @@
 class logger //basic logger
 {
   public:
-  
+
   //Functions
 
   //set log file and open it
@@ -78,7 +78,7 @@ template <typename T> std::string cnfs(
 
 //check file is open or else throw
 template <typename T> void check_file(
-  T &s_f, //stream file 
+  T &s_f, //stream file
   const std::string &pathstr) //file path string
 {
   if (!s_f.is_open()){ throw error("unable to open "+pathstr);}
