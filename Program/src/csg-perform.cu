@@ -12,15 +12,15 @@ int main(
   const char **argv) //argument vector
 {
   //check command-line arguments
-  if (argc<3){ std::cout<<"missing arguments\n"; return EXIT_FAILURE;}
-  if (argc>3){ std::cout<<"extra arguments\n"; return EXIT_FAILURE;}
+  if (argc<4){ std::cout<<"missing arguments\n"; return EXIT_FAILURE;}
+  if (argc>4){ std::cout<<"extra arguments\n"; return EXIT_FAILURE;}
 
   //parse command-line arguments
-  const float beta = std::stof(argv[1]); //inverse temperature
-  const float H = std::stof(argv[2]); //external magnetic field
+  const std::string sim_dir = argv[1]; //simulation directory
+  const float beta = std::stof(argv[2]); //inverse temperature
+  const float H = std::stof(argv[3]); //external magnetic field
 
   //declare auxiliary variables
-  const std::string dir = "Simulations"; //output directory
   std::string pathstr; //file path string
   std::string pathpat; //file path pattern
   std::ifstream inp_f; //input file
@@ -39,16 +39,16 @@ int main(
     eamsim sim = eamsim(beta,H); //simulation
 
     //search for previous simulations
-    pathpat = dir+"/sim-"+cnfs(beta,5,'0',3)+"-*";
+    pathpat = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-*";
     i_s_f = glob_count(pathpat);
 
     if (i_s_f==0) //initialize lattice array
     {
       sim.init_lattice();
     }
-    else //read lattice array from previous simulation
+    else //read last state from previous simulation
     {
-      pathstr = dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
+      pathstr = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
       pathstr += cnfs(i_s_f-1,2,'0')+".bin";
       inp_f.open(pathstr,std::ios::binary);
       check_file(inp_f,pathstr);
@@ -57,7 +57,7 @@ int main(
     }
 
     //run whole simulation
-    pathstr = dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
+    pathstr = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
     pathstr += cnfs(i_s_f,2,'0')+".bin";
     out_f.open(pathstr,std::ios::binary);
     check_file(out_f,pathstr);

@@ -468,8 +468,8 @@ eamsim::eamsim(
   , H {H}
 {
   //check parameters
-  if (!(0.125<=beta&&beta<=8.0)){ throw error("beta out of range");}
-  if (!(-8.0<=H&&H<=8.0)){ throw error("H out of range");}
+  if (!(0.25<=beta&&beta<=4.0)){ throw error("beta out of range");}
+  if (!(0.0<=H&&H<=4.0)){ throw error("H out of range");}
   logger::record("beta = "+cnfs(beta,5,'0',3));
   logger::record("H = "+cnfs(H,5,'0',3));
 
@@ -574,8 +574,18 @@ void eamsim::init_lattice()
   //initialize every lattice in the host
   for (uint i_l = 0; i_l<NDIS; ++i_l) //lattice index
   {
+    if ((i_l&1)==0) //initialize lattice coupling constants
+    {
+      init_coupling_constants(gen,&lattice_h[N*i_l]);
+    }
+    else //use the same coupling constants for adjacent realizations
+    {
+      cuda_check(cudaMemcpy(&lattice_h[N*i_l],&lattice_h[N*(i_l-1)],
+        N*sizeof(uint),cudaMemcpyHostToHost));
+    }
+
+    //initialize lattice multispins
     init_multispins(gen,&lattice_h[N*i_l]);
-    init_coupling_constants(gen,&lattice_h[N*i_l]);
   }
 
   //copy lattice host array to device
