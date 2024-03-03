@@ -4,19 +4,6 @@
 
 #include <time.h> //time utilities library
 
-//Constants
-
-static constexpr uint NPROB = 14; //number of possible probabilities
-static constexpr uint PTABW = 16; //probability lookup table width
-
-static constexpr uint SBSHFL = 32; //Monte Carlo steps between shuffles
-static constexpr uint SBMEAS = 2048; //Monte Carlo steps between measurements
-static constexpr uint SPFILE = 262144; //Monte Carlo steps per file
-
-static constexpr uint NTPB = L*L; //number of threads per block
-static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
-static constexpr uint NBPG = NDIS; //number of blocks per grid
-
 //Device Functions
 
 //initialize probability lookup table
@@ -599,6 +586,7 @@ void eamsim::init_lattice()
 //read last state from binary file
 void eamsim::read_last_state(std::ifstream &bin_inp_f) //binary input file
 {
+  //read all states in the input file
   for (uint i_m = 0; i_m<(SPFILE/SBMEAS); ++i_m) //measurement index
   {
     read_state(bin_inp_f);

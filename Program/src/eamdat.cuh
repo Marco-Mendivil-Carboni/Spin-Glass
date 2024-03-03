@@ -12,6 +12,10 @@ static constexpr uint N = L*L*L; //number of sites
 
 static constexpr uint NDIS = 256; //number of disorder realizations
 
+static constexpr uint SBSHFL = 32; //Monte Carlo steps between shuffles
+static constexpr uint SBMEAS = 2048; //Monte Carlo steps between measurements
+static constexpr uint SPFILE = 262144; //Monte Carlo steps per file
+
 static constexpr uint NSPS = 4; //number of spins per segment
 static constexpr uint NREP = 24; //number of temperature replicas
 
@@ -25,10 +29,12 @@ static constexpr uint MASKAB = 0xffffffff; //all bits mask
 static constexpr uint SHIFTMS = 24; //maximum segment shift
 static constexpr uint SHIFTSJ = 26; //single coupling constant shift
 
-// MASKAS = 00000000111111111111111111111111
-// MASKSS = 00000000000100010001000100010001
-// MASKAJ = 11111100000000000000000000000000
-// MASKSJ = 00000100000000000000000000000000
+static constexpr uint NPROB = 14; //number of possible probabilities
+static constexpr uint PTABW = 16; //probability lookup table width
+
+static constexpr uint NTPB = L*L; //number of threads per block
+static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
+static constexpr uint NBPG = NDIS; //number of blocks per grid
 
 //Classes
 

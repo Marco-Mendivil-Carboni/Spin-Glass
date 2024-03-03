@@ -21,26 +21,27 @@ int main(
   const float H = std::stof(argv[3]); //external magnetic field
 
   //declare auxiliary variables
-  std::string pathstr; //file path string
-  std::string pathpat; //file path pattern
+  std::string simpathbeg = //simulation file path beginning
+    sim_dir+"/"+cnfs(beta,5,'0',3)+"-"+cnfs(H,5,'0',3)+"-";
+  std::string path; //complete file path
+  std::string pattern; //file path pattern
   std::ifstream inp_f; //input file
   std::ofstream out_f; //output file
   uint i_s_f; //simulation file index
 
   //create log file in current working directory
   time_t t_s = time(nullptr); //starting time
-  pathstr = std::to_string(t_s)+".log";
-  logger::set_file(pathstr);
+  path = std::to_string(t_s)+".log";
+  logger::set_file(path);
 
-  //main try block
-  try
+  try //main try block
   {
     //initialize simulation
     eamsim sim = eamsim(beta,H); //simulation
 
     //search for previous simulations
-    pathpat = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-*";
-    i_s_f = glob_count(pathpat);
+    pattern = simpathbeg+"*";
+    i_s_f = glob_count(pattern);
 
     if (i_s_f==0) //initialize lattice array
     {
@@ -48,19 +49,17 @@ int main(
     }
     else //read last state from previous simulation
     {
-      pathstr = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
-      pathstr += cnfs(i_s_f-1,2,'0')+".bin";
-      inp_f.open(pathstr,std::ios::binary);
-      check_file(inp_f,pathstr);
+      path = simpathbeg+cnfs(i_s_f-1,2,'0')+".bin";
+      inp_f.open(path,std::ios::binary);
+      check_file(inp_f,path);
       sim.read_last_state(inp_f);
       inp_f.close();
     }
 
     //run whole simulation
-    pathstr = sim_dir+"/sim-"+cnfs(beta,5,'0',3)+"-";
-    pathstr += cnfs(i_s_f,2,'0')+".bin";
-    out_f.open(pathstr,std::ios::binary);
-    check_file(out_f,pathstr);
+    path = simpathbeg+cnfs(i_s_f,2,'0')+".bin";
+    out_f.open(path,std::ios::binary);
+    check_file(out_f,path);
     sim.run_simulation(out_f);
     out_f.close();
   }
@@ -73,8 +72,8 @@ int main(
 
   //remove log file
   logger::set_file("/dev/null");
-  pathstr = std::to_string(t_s)+".log";
-  std::remove(pathstr.c_str());
+  path = std::to_string(t_s)+".log";
+  std::remove(path.c_str());
 
   //exit program successfully
   return EXIT_SUCCESS;
