@@ -116,7 +116,7 @@ inline __device__ void perform_MC_steps(
   float *s_rep_beta, //shared replica beta array
   const float H, //external magnetic field
   prng *prngs, //PRNG state array
-  int n_steps) //number of Monte Carlo steps
+  uint n_steps) //number of Monte Carlo steps
 {
   //calculate indexes
   const uint i_gb = blockIdx.x; //grid block index

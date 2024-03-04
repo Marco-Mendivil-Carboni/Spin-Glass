@@ -2,97 +2,99 @@
 
 #include "eamana.cuh" //EA model analysis
 
-//Constants
-
-//Device Functions
-
 //Global Functions
 
-// //...
-// __global__ void kernel_compute_q(int rec)
-// {
-//   const int bidx = threadIdx.x;
+//compute overlap array
+__global__ void compute_q(
+  float2 *q, //overlap array
+  uint *lattice) //lattice array
+{
+  //calculate indexes
+  const uint i_gb = blockIdx.x; //grid block index
+  const uint i_bt = threadIdx.x; //block thread index
+  const uint i_l = i_gb<<1; //lattice index
 
-//   // sizeof(u_int32_t) * 16 * 16 * 16 = 16 KB
-//   __shared__ MSC_DATATYPE l1[SZ_CUBE];
-//   __shared__ double qk_real[3][NBETA];
-//   __shared__ double qk_imag[3][NBETA];
-//   __shared__ double qk2_real[6][NBETA];
-//   __shared__ double qk2_imag[6][NBETA];
-//   const int lattice_offset0 = SZ_CUBE * (blockIdx.x << 1);
-//   const int lattice_offset1 = lattice_offset0 + SZ_CUBE;
-//   const double k=2*PI/SZ;
+  //declare auxiliary variables
+  __shared__ float s_l_q[N]; //shared local overlap array
+  __shared__ double2 s_q[NQVAL]; //shared overlap array
 
-//   for (int offset = 0; offset < SZ_CUBE; offset += TperB) {
-//     l1[offset + bidx] =		// xord_word
-//       plattice1[lattice_offset0 + offset + bidx] ^
-//       plattice1[lattice_offset1 + offset + bidx];
-//   }
+  //compute shared local overlap array
+  int l_q_b; //local overlap bit
+  for (uint i_s = i_bt; i_s<N; i_s += NTPB) //site index
+  {
+    l_q_b = (lattice[N*i_l+i_s]^lattice[N*(i_l+1)+i_s])&1;
+    s_l_q[i_s] = 1-(l_q_b<<1);
+  }
+  __syncthreads();
 
-//   __syncthreads();
+  if (i_bt==0) //compute overlap array
+  {
+    //initialize shared overlap array
+    for(uint i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    {
+      s_q[i_qv].x = 0.0;
+      s_q[i_qv].y = 0.0;
+    }
 
-//   // is double an overkill?
-//   if (bidx < NBETA) {
-//     float q0 = 0.0f;
-//     for(int j=0;j<3;j++){
-//       qk_real[j][bidx] = 0.0f;
-//       qk_imag[j][bidx] = 0.0f;
-//     }
-//     for(int j=0;j<6;j++){
-//       qk2_real[j][bidx] = 0.0f;
-//       qk2_imag[j][bidx]= 0.0f;
-//     }
+    //iterate over all sites
+    for (uint i_s = 0; i_s<N; ++i_s) //site index
+    {
+      //calculate position and wave number
+      float x = i_s%L; //x position
+      float y = (i_s/L)%L; //y position
+      float z = (i_s/L)/L; //z position
+      float k = 2*M_PI/L; //wave number
 
-//     MSC_DATATYPE xor_word;
-//     int xor_bit;
+      //read local overlap
+      float l_q = s_l_q[i_s]; //local overlap
 
-//     for (int i = 0; i < SZ_CUBE; i++) {
-//       xor_word = l1[i];
-//       xor_bit = (xor_word >> bidx) & 0x1;
-//       xor_bit = 1 - (xor_bit << 1);	// parallel: +1, reverse: -1
+      //compute overlap value 0
+      s_q[0].x += l_q*cosf(0);
+      s_q[0].y += l_q*sinf(0);
 
-//       double bit=xor_bit;
-//       double x= i % SZ;
-//       double y= (i / SZ) % SZ;
-//       double z= (i / SZ) / SZ;
+      //compute overlap value 1
+      s_q[1].x += l_q*cosf(k*x);
+      s_q[1].x += l_q*cosf(k*y);
+      s_q[1].x += l_q*cosf(k*z);
+      s_q[1].y += l_q*sinf(k*x);
+      s_q[1].y += l_q*sinf(k*y);
+      s_q[1].y += l_q*sinf(k*z);
 
-//       q0 += bit;
+      //compute overlap value 2
+      s_q[2].x += l_q*cosf(k*x+k*y);
+      s_q[2].x += l_q*cosf(k*x-k*y);
+      s_q[2].x += l_q*cosf(k*x+k*z);
+      s_q[2].x += l_q*cosf(k*x-k*z);
+      s_q[2].x += l_q*cosf(k*y+k*z);
+      s_q[2].x += l_q*cosf(k*y-k*z);
+      s_q[2].y += l_q*sinf(k*x+k*y);
+      s_q[2].y += l_q*sinf(k*x-k*y);
+      s_q[2].y += l_q*sinf(k*x+k*z);
+      s_q[2].y += l_q*sinf(k*x-k*z);
+      s_q[2].y += l_q*sinf(k*y+k*z);
+      s_q[2].y += l_q*sinf(k*y-k*z);
+    }
 
-//       qk_real[0][bidx] += bit * cos(x*k);
-//       qk_real[1][bidx] += bit * cos(y*k);
-//       qk_real[2][bidx] += bit * cos(z*k);
+    //normalize overlap value 0
+    s_q[0].x /= N;
+    s_q[0].y /= N;
 
-//       qk_imag[0][bidx] += bit * sin(x*k);
-//       qk_imag[1][bidx] += bit * sin(y*k);
-//       qk_imag[2][bidx] += bit * sin(z*k);
+    //normalize overlap value 1
+    s_q[1].x /= 3*N;
+    s_q[1].y /= 3*N;
 
-//       qk2_real[0][bidx] += bit * cos(x*k + y*k);
-//       qk2_real[1][bidx] += bit * cos(x*k - y*k);
-//       qk2_real[2][bidx] += bit * cos(x*k + z*k);
-//       qk2_real[3][bidx] += bit * cos(x*k - z*k);
-//       qk2_real[4][bidx] += bit * cos(y*k + z*k);
-//       qk2_real[5][bidx] += bit * cos(y*k - z*k);
+    //normalize overlap value 2
+    s_q[2].x /= 6*N;
+    s_q[2].y /= 6*N;
 
-//       qk2_imag[0][bidx] += bit * sin(x*k + y*k);
-//       qk2_imag[1][bidx] += bit * sin(x*k - y*k);
-//       qk2_imag[2][bidx] += bit * sin(x*k + z*k);
-//       qk2_imag[3][bidx] += bit * sin(x*k - z*k);
-//       qk2_imag[4][bidx] += bit * sin(y*k + z*k);
-//       qk2_imag[5][bidx] += bit * sin(y*k - z*k);
-//    }
-
-//     pst[rec].q[blockIdx.x][bidx] = q0;
-//     for(int j=0;j<3;j++){
-//       pst[rec].qk_real[j][blockIdx.x][bidx] = qk_real[j][bidx];
-//       pst[rec].qk_imag[j][blockIdx.x][bidx] = qk_imag[j][bidx];
-//     }
-//     for(int j=0;j<6;j++){
-//       pst[rec].qk2_real[j][blockIdx.x][bidx] = qk2_real[j][bidx];
-//       pst[rec].qk2_imag[j][blockIdx.x][bidx] = qk2_imag[j][bidx];
-//     }
-//   }
-//   __syncthreads();
-// }
+    //write overlap array
+    for(uint i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    {
+      q[NQVAL*i_gb+i_qv].x = s_q[i_qv].x;
+      q[NQVAL*i_gb+i_qv].y = s_q[i_qv].y;
+    }
+  }
+}
 
 //Host Functions
 
@@ -100,11 +102,11 @@
 eamana::eamana()
   : eamdat()
 {
-  //check parameters
-
   //allocate device memory
+  cuda_check(cudaMalloc(&q,(NDIS/2)*NQVAL*sizeof(float2)));
 
   //allocate host memory
+  cuda_check(cudaMallocHost(&q_h,(NDIS/2)*NQVAL*sizeof(float2)));
 
   //record success message
   logger::record("eamana initialized");
@@ -114,6 +116,45 @@ eamana::eamana()
 eamana::~eamana()
 {
   //deallocate device memory
+  cuda_check(cudaFree(q));
 
   //deallocate host memory
+  cuda_check(cudaFreeHost(q_h));
+}
+
+//process simulation file
+void eamana::process_sim_file(
+  std::ofstream &txt_out_f, //text output file
+  std::ifstream &bin_inp_f) //binary input file
+{
+  //read all states in the input file
+  for (uint i_m = 0; i_m<(SPFILE/SBMEAS); ++i_m) //measurement index
+  {
+    //read state from binary file
+    read_state(bin_inp_f);
+
+    //compute overlap array
+    compute_q<<<NBPG/2,NTPB>>>(q,lattice);
+
+    //copy overlap array to host
+    cuda_check(cudaMemcpy(q_h,q,(NDIS/2)*NQVAL*sizeof(float2),
+      cudaMemcpyDeviceToHost));
+
+    //write overlap host array to text file
+    write_q_h(txt_out_f);
+  }
+}
+
+//write overlap host array to text file
+void eamana::write_q_h(std::ofstream &txt_out_f) //text output file
+{
+  for (uint i_uq = 0; i_uq<(NDIS/2); ++i_uq) //unique disorder index
+  {
+    for(uint i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    {
+      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].x,10,' ',6)<<" ";
+      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].y,10,' ',6)<<" | ";
+    }
+  }
+  txt_out_f<<"\n";
 }

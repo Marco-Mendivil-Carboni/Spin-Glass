@@ -32,6 +32,8 @@ static constexpr uint SHIFTSJ = 26; //single coupling constant shift
 static constexpr uint NPROB = 14; //number of possible probabilities
 static constexpr uint PTABW = 16; //probability lookup table width
 
+static constexpr uint NQVAL = 3; //number of overlap values computed
+
 static constexpr uint NTPB = L*L; //number of threads per block
 static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
 static constexpr uint NBPG = NDIS; //number of blocks per grid

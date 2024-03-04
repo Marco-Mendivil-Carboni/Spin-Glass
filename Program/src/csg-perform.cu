@@ -40,7 +40,7 @@ int main(
     eamsim sim = eamsim(beta,H); //simulation
 
     //search for previous simulations
-    pattern = simpathbeg+"*";
+    pattern = simpathbeg+"*.bin";
     i_s_f = glob_count(pattern);
 
     if (i_s_f==0) //initialize lattice array
