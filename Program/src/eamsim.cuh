@@ -15,7 +15,7 @@ using prng = curandState; //PRNG type
 
 struct ib_s //index-beta struct
 {
-  uint idx; //index
+  int idx; //index
   float beta; //inverse temperature
 };
 
@@ -53,7 +53,7 @@ class eamsim : public eamdat //EA model simulation
 
   ib_s *repib; //replica index-beta array
   prng *prngs; //PRNG state array
-  uint *slattice; //shuffled lattice array
+  uint32_t *slattice; //shuffled lattice array
 
   ib_s *repib_h; //replica index-beta host array
 

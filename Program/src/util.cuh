@@ -59,7 +59,7 @@ class error : public std::runtime_error //generic exception type
 void cuda_check(cudaError_t rtn_val); //cuda runtime API call return value
 
 //count files matching pattern
-uint glob_count(const std::string &pathpat); //file path pattern
+int glob_count(const std::string &pathpat); //file path pattern
 
 //convert number to formatted string
 template <typename T> std::string cnfs(

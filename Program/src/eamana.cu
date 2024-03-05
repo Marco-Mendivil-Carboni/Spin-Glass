@@ -7,12 +7,12 @@
 //compute overlap array
 __global__ void compute_q(
   float2 *q, //overlap array
-  uint *lattice) //lattice array
+  uint32_t *lattice) //lattice array
 {
   //calculate indexes
-  const uint i_gb = blockIdx.x; //grid block index
-  const uint i_bt = threadIdx.x; //block thread index
-  const uint i_l = i_gb<<1; //lattice index
+  const int i_gb = blockIdx.x; //grid block index
+  const int i_bt = threadIdx.x; //block thread index
+  const int i_l = i_gb<<1; //lattice index
 
   //declare auxiliary variables
   __shared__ float s_l_q[N]; //shared local overlap array
@@ -20,7 +20,7 @@ __global__ void compute_q(
 
   //compute shared local overlap array
   int l_q_b; //local overlap bit
-  for (uint i_s = i_bt; i_s<N; i_s += NTPB) //site index
+  for (int i_s = i_bt; i_s<N; i_s += NTPB) //site index
   {
     l_q_b = (lattice[N*i_l+i_s]^lattice[N*(i_l+1)+i_s])&1;
     s_l_q[i_s] = 1-(l_q_b<<1);
@@ -30,14 +30,14 @@ __global__ void compute_q(
   if (i_bt==0) //compute overlap array
   {
     //initialize shared overlap array
-    for(uint i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
     {
       s_q[i_qv].x = 0.0;
       s_q[i_qv].y = 0.0;
     }
 
     //iterate over all sites
-    for (uint i_s = 0; i_s<N; ++i_s) //site index
+    for (int i_s = 0; i_s<N; ++i_s) //site index
     {
       //calculate position and wave number
       float x = i_s%L; //x position
@@ -88,7 +88,7 @@ __global__ void compute_q(
     s_q[2].y /= 6*N;
 
     //write overlap array
-    for(uint i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
     {
       q[NQVAL*i_gb+i_qv].x = s_q[i_qv].x;
       q[NQVAL*i_gb+i_qv].y = s_q[i_qv].y;
@@ -128,7 +128,7 @@ void eamana::process_sim_file(
   std::ifstream &bin_inp_f) //binary input file
 {
   //read all states in the input file
-  for (uint i_m = 0; i_m<(SPFILE/SBMEAS); ++i_m) //measurement index
+  for (int i_m = 0; i_m<(SPFILE/SBMEAS); ++i_m) //measurement index
   {
     //read state from binary file
     read_state(bin_inp_f);
@@ -148,12 +148,12 @@ void eamana::process_sim_file(
 //write overlap host array to text file
 void eamana::write_q_h(std::ofstream &txt_out_f) //text output file
 {
-  for (uint i_uq = 0; i_uq<(NDIS/2); ++i_uq) //unique disorder index
+  for (int i_uq = 0; i_uq<(NDIS/2); ++i_uq) //unique disorder index
   {
-    for(uint i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
     {
-      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].x,10,' ',6)<<" ";
-      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].y,10,' ',6)<<" | ";
+      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].x,10,' ',6);
+      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].y,10,' ',6);
     }
   }
   txt_out_f<<"\n";

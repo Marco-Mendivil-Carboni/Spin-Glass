@@ -80,7 +80,7 @@ void cuda_check(cudaError_t rtn_val) //cuda runtime API call return value
 }
 
 //count files matching pattern
-uint glob_count(const std::string &pathpat) //file path pattern
+int glob_count(const std::string &pathpat) //file path pattern
 {
   glob_t glob_sr; //glob search result
   int rtn_val = glob(pathpat.c_str(),0,nullptr,&glob_sr); //return value

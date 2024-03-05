@@ -7,36 +7,36 @@
 
 //Constants
 
-static constexpr uint L = 16; //lattice size
-static constexpr uint N = L*L*L; //number of sites
+static constexpr int L = 16; //lattice size
+static constexpr int N = L*L*L; //number of sites
 
-static constexpr uint NDIS = 256; //number of disorder realizations
+static constexpr int NDIS = 256; //number of disorder realizations
 
-static constexpr uint SBSHFL = 32; //Monte Carlo steps between shuffles
-static constexpr uint SBMEAS = 2048; //Monte Carlo steps between measurements
-static constexpr uint SPFILE = 262144; //Monte Carlo steps per file
+static constexpr int SBSHFL = 32; //Monte Carlo steps between shuffles
+static constexpr int SBMEAS = 2048; //Monte Carlo steps between measurements
+static constexpr int SPFILE = 262144; //Monte Carlo steps per file
 
-static constexpr uint NSPS = 4; //number of spins per segment
-static constexpr uint NREP = 24; //number of temperature replicas
+static constexpr int NSPS = 4; //number of spins per segment
+static constexpr int NREP = 24; //number of temperature replicas
 
-static constexpr uint MASKAS = 0x00ffffff; //all spins mask
-static constexpr uint MASKSS = 0x00111111; //spin segments mask
-static constexpr uint MASKAJ = 0xfc000000; //all coupling constants mask
-static constexpr uint MASKSJ = 0x04000000; //single coupling constant mask
-static constexpr uint MASKES = 0x0000000f; //energy-spin index mask
-static constexpr uint MASKAB = 0xffffffff; //all bits mask
+static constexpr uint32_t MASKAS = 0x00ffffff; //all spins mask
+static constexpr uint32_t MASKSS = 0x00111111; //spin segments mask
+static constexpr uint32_t MASKAJ = 0xfc000000; //all coupling constants mask
+static constexpr uint32_t MASKSJ = 0x04000000; //single coupling constant mask
+static constexpr uint32_t MASKES = 0x0000000f; //energy-spin index mask
+static constexpr uint32_t MASKAB = 0xffffffff; //all bits mask
 
-static constexpr uint SHIFTMS = 24; //maximum segment shift
-static constexpr uint SHIFTSJ = 26; //single coupling constant shift
+static constexpr int SHIFTMS = 24; //maximum segment shift
+static constexpr int SHIFTSJ = 26; //single coupling constant shift
 
-static constexpr uint NPROB = 14; //number of possible probabilities
-static constexpr uint PTABW = 16; //probability lookup table width
+static constexpr int NPROB = 14; //number of possible probabilities
+static constexpr int PTABW = 16; //probability lookup table width
 
-static constexpr uint NQVAL = 3; //number of overlap values computed
+static constexpr int NQVAL = 3; //number of overlap values computed
 
-static constexpr uint NTPB = L*L; //number of threads per block
+static constexpr int NTPB = L*L; //number of threads per block
 static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
-static constexpr uint NBPG = NDIS; //number of blocks per grid
+static constexpr int NBPG = NDIS; //number of blocks per grid
 
 //Classes
 
@@ -62,9 +62,9 @@ class eamdat //EA model data
 
   //Parameters and Variables
 
-  uint *lattice; //lattice array
+  uint32_t *lattice; //lattice array
 
-  uint *lattice_h; //lattice host array
+  uint32_t *lattice_h; //lattice host array
 };
 
 #endif //MMC_EAMDAT_H
