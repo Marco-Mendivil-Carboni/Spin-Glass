@@ -12,17 +12,17 @@ __global__ void compute_q(
   //calculate indexes
   const int i_gb = blockIdx.x; //grid block index
   const int i_bt = threadIdx.x; //block thread index
-  const int i_l = i_gb<<1; //lattice index
+  const int i_fl = i_gb*NCP; //first lattice index
 
   //declare auxiliary variables
   __shared__ float s_l_q[N]; //shared local overlap array
-  __shared__ double2 s_q[NQVAL]; //shared overlap array
+  __shared__ float2 s_q[NQVAL]; //shared overlap array
 
   //compute shared local overlap array
   int l_q_b; //local overlap bit
   for (int i_s = i_bt; i_s<N; i_s += NTPB) //site index
   {
-    l_q_b = (lattice[N*i_l+i_s]^lattice[N*(i_l+1)+i_s])&1;
+    l_q_b = (lattice[N*i_fl+i_s]^lattice[N*(i_fl+1)+i_s])&1;
     s_l_q[i_s] = 1-(l_q_b<<1);
   }
   __syncthreads();
@@ -48,44 +48,23 @@ __global__ void compute_q(
       //read local overlap
       float l_q = s_l_q[i_s]; //local overlap
 
-      //compute overlap value 0
+      //compute overlap values
       s_q[0].x += l_q*cosf(0);
       s_q[0].y += l_q*sinf(0);
-
-      //compute overlap value 1
       s_q[1].x += l_q*cosf(k*x);
-      s_q[1].x += l_q*cosf(k*y);
-      s_q[1].x += l_q*cosf(k*z);
       s_q[1].y += l_q*sinf(k*x);
-      s_q[1].y += l_q*sinf(k*y);
-      s_q[1].y += l_q*sinf(k*z);
-
-      //compute overlap value 2
-      s_q[2].x += l_q*cosf(k*x+k*y);
-      s_q[2].x += l_q*cosf(k*x-k*y);
-      s_q[2].x += l_q*cosf(k*x+k*z);
-      s_q[2].x += l_q*cosf(k*x-k*z);
-      s_q[2].x += l_q*cosf(k*y+k*z);
-      s_q[2].x += l_q*cosf(k*y-k*z);
-      s_q[2].y += l_q*sinf(k*x+k*y);
-      s_q[2].y += l_q*sinf(k*x-k*y);
-      s_q[2].y += l_q*sinf(k*x+k*z);
-      s_q[2].y += l_q*sinf(k*x-k*z);
-      s_q[2].y += l_q*sinf(k*y+k*z);
-      s_q[2].y += l_q*sinf(k*y-k*z);
+      s_q[2].x += l_q*cosf(k*y);
+      s_q[2].y += l_q*sinf(k*y);
+      s_q[3].x += l_q*cosf(k*z);
+      s_q[3].y += l_q*sinf(k*z);
     }
 
-    //normalize overlap value 0
-    s_q[0].x /= N;
-    s_q[0].y /= N;
-
-    //normalize overlap value 1
-    s_q[1].x /= 3*N;
-    s_q[1].y /= 3*N;
-
-    //normalize overlap value 2
-    s_q[2].x /= 6*N;
-    s_q[2].y /= 6*N;
+    //normalize shared overlap array
+    for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    {
+      s_q[i_qv].x /= N;
+      s_q[i_qv].y /= N;
+    }
 
     //write overlap array
     for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
@@ -103,10 +82,10 @@ eamana::eamana()
   : eamdat()
 {
   //allocate device memory
-  cuda_check(cudaMalloc(&q,(NDIS/2)*NQVAL*sizeof(float2)));
+  cuda_check(cudaMalloc(&q,NDIS*NQVAL*sizeof(float2)));
 
   //allocate host memory
-  cuda_check(cudaMallocHost(&q_h,(NDIS/2)*NQVAL*sizeof(float2)));
+  cuda_check(cudaMallocHost(&q_h,NDIS*NQVAL*sizeof(float2)));
 
   //record success message
   logger::record("eamana initialized");
@@ -134,10 +113,10 @@ void eamana::process_sim_file(
     read_state(bin_inp_f);
 
     //compute overlap array
-    compute_q<<<NBPG/2,NTPB>>>(q,lattice);
+    compute_q<<<NDIS,NTPB>>>(q,lattice);
 
     //copy overlap array to host
-    cuda_check(cudaMemcpy(q_h,q,(NDIS/2)*NQVAL*sizeof(float2),
+    cuda_check(cudaMemcpy(q_h,q,NDIS*NQVAL*sizeof(float2),
       cudaMemcpyDeviceToHost));
 
     //write overlap host array to text file
@@ -148,13 +127,14 @@ void eamana::process_sim_file(
 //write overlap host array to text file
 void eamana::write_q_h(std::ofstream &txt_out_f) //text output file
 {
-  for (int i_uq = 0; i_uq<(NDIS/2); ++i_uq) //unique disorder index
+  for (int i_dr = 0; i_dr<NDIS; ++i_dr) //disorder realization index
   {
     for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
     {
-      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].x,10,' ',6);
-      txt_out_f<<cnfs(q_h[NQVAL*i_uq+i_qv].y,10,' ',6);
+      txt_out_f<<cnfs(q_h[NQVAL*i_dr+i_qv].x,12,' ',6);
+      txt_out_f<<cnfs(q_h[NQVAL*i_dr+i_qv].y,12,' ',6);
     }
+    txt_out_f<<"\n";
   }
   txt_out_f<<"\n";
 }

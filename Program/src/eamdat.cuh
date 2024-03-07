@@ -11,6 +11,9 @@ static constexpr int L = 16; //lattice size
 static constexpr int N = L*L*L; //number of sites
 
 static constexpr int NDIS = 256; //number of disorder realizations
+static constexpr int NCP = 2; //number of disorder realization copies
+
+static constexpr int NL = NDIS*NCP; //number of lattices
 
 static constexpr int SBSHFL = 32; //Monte Carlo steps between shuffles
 static constexpr int SBMEAS = 2048; //Monte Carlo steps between measurements
@@ -32,11 +35,10 @@ static constexpr int SHIFTSJ = 26; //single coupling constant shift
 static constexpr int NPROB = 14; //number of possible probabilities
 static constexpr int PTABW = 16; //probability lookup table width
 
-static constexpr int NQVAL = 3; //number of overlap values computed
+static constexpr int NQVAL = 4; //number of computed overlap values
 
 static constexpr int NTPB = L*L; //number of threads per block
 static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
-static constexpr int NBPG = NDIS; //number of blocks per grid
 
 //Classes
 

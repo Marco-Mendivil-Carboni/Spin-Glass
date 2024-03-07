@@ -461,18 +461,18 @@ eamsim::eamsim(
   logger::record("H = "+cnfs(H,5,'0',3));
 
   //allocate device memory
-  cuda_check(cudaMalloc(&repib,NREP*NDIS*sizeof(ib_s)));
-  cuda_check(cudaMalloc(&prngs,NTPB*NBPG*sizeof(prng)));
-  cuda_check(cudaMalloc(&slattice,N*NDIS*sizeof(uint32_t)));
+  cuda_check(cudaMalloc(&repib,NREP*NL*sizeof(ib_s)));
+  cuda_check(cudaMalloc(&prngs,NTPB*NL*sizeof(prng)));
+  cuda_check(cudaMalloc(&slattice,N*NL*sizeof(uint32_t)));
 
   //allocate host memory
-  cuda_check(cudaMallocHost(&repib_h,NREP*NDIS*sizeof(ib_s)));
+  cuda_check(cudaMallocHost(&repib_h,NREP*NL*sizeof(ib_s)));
 
   //initialize replica index-beta array
   init_repib();
 
   //initialize PRNG state array
-  init_prng<<<NBPG,NTPB>>>(prngs,time(nullptr));
+  init_prng<<<NL,NTPB>>>(prngs,time(nullptr));
 
   //record success message
   logger::record("eamsim initialized");
@@ -559,9 +559,9 @@ void eamsim::init_lattice()
   curandSetPseudoRandomGeneratorSeed(gen,time(nullptr));
 
   //initialize every lattice in the host
-  for (int i_l = 0; i_l<NDIS; ++i_l) //lattice index
+  for (int i_l = 0; i_l<NL; ++i_l) //lattice index
   {
-    if ((i_l&1)==0) //initialize lattice coupling constants
+    if ((i_l%NCP)==0) //initialize lattice coupling constants
     {
       init_coupling_constants(gen,&lattice_h[N*i_l]);
     }
@@ -576,7 +576,7 @@ void eamsim::init_lattice()
   }
 
   //copy lattice host array to device
-  cuda_check(cudaMemcpy(lattice,lattice_h,N*NDIS*sizeof(uint32_t),
+  cuda_check(cudaMemcpy(lattice,lattice_h,N*NL*sizeof(uint32_t),
     cudaMemcpyHostToDevice));
 
   //record success message
@@ -597,7 +597,7 @@ void eamsim::read_last_state(std::ifstream &bin_inp_f) //binary input file
 void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 {
   //copy lattice array to shuffled lattice array
-  cuda_check(cudaMemcpy(slattice,lattice,N*NDIS*sizeof(uint32_t),
+  cuda_check(cudaMemcpy(slattice,lattice,N*NL*sizeof(uint32_t),
     cudaMemcpyDeviceToDevice));
 
   //run whole simulation
@@ -607,13 +607,13 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
     logger::show_prog_pc(100.0*step/SPFILE);
 
     //run simulation section between measurements
-    run_simulation_section<<<NBPG,CBDIM>>>(slattice,repib,H,prngs);
+    run_simulation_section<<<NL,CBDIM>>>(slattice,repib,H,prngs);
 
     //rearrange lattice temperature replicas
-    rearrange<<<NBPG,NTPB>>>(lattice,repib,slattice);
+    rearrange<<<NL,NTPB>>>(lattice,repib,slattice);
 
     //copy lattice array to host
-    cuda_check(cudaMemcpy(lattice_h,lattice,N*NDIS*sizeof(uint32_t),
+    cuda_check(cudaMemcpy(lattice_h,lattice,N*NL*sizeof(uint32_t),
       cudaMemcpyDeviceToHost));
 
     //write state to binary file
@@ -631,7 +631,7 @@ void eamsim::init_repib()
   const float bratio = pow(2.0,-4/(NREP-1.0)); //beta ratio
 
   //initialize replica index-beta host array
-  for (int i_l = 0; i_l<NDIS; ++i_l) //lattice index
+  for (int i_l = 0; i_l<NL; ++i_l) //lattice index
   {
     for (int i_b = 0; i_b<NREP; ++i_b) //beta index
     {
@@ -641,6 +641,6 @@ void eamsim::init_repib()
   }
 
   //copy replica index-beta host array to device
-  cuda_check(cudaMemcpy(repib,repib_h,NREP*NDIS*sizeof(ib_s),
+  cuda_check(cudaMemcpy(repib,repib_h,NREP*NL*sizeof(ib_s),
     cudaMemcpyHostToDevice));
 }
