@@ -39,7 +39,7 @@ int main(
     n_s_f = glob_count(pattern);
 
     //open output file
-    path = simpathbeg+"q.dat";
+    path = simpathbeg+"obs.dat";
     out_f.open(path);
     check_file(out_f,path);
 

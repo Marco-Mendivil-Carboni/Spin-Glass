@@ -28,14 +28,16 @@ class eamana : public eamdat //EA model analysis
 
   //Parameters and Variables
 
+  float *m; //magnetization array
   float2 *q; //overlap array
 
+  float *m_h; //magnetization host array
   float2 *q_h; //overlap host array
 
   //Functions
 
-  //write overlap host array to text file
-  void write_q_h(std::ofstream &txt_out_f); //text output file
+  //write observables to text file
+  void write_obs(std::ofstream &txt_out_f); //text output file
 };
 
 #endif //MMC_EAMANA_H
