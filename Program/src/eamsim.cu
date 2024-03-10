@@ -455,9 +455,9 @@ eamsim::eamsim(
   , H {H}
 {
   //check parameters
-  if (!(0.25<=beta&&beta<=4.0)){ throw error("beta out of range");}
+  if (!(0.0<=beta&&beta<=2.0)){ throw error("beta out of range");}
   logger::record("beta = "+cnfs(beta,5,'0',3));
-  if (!(0.0<=H&&H<=4.0)){ throw error("H out of range");}
+  if (!(0.0<=H&&H<=2.0)){ throw error("H out of range");}
   logger::record("H = "+cnfs(H,5,'0',3));
 
   //allocate device memory
