@@ -447,17 +447,12 @@ __global__ void rearrange(
 //Host Functions
 
 //EA model simulation constructor
-eamsim::eamsim(
-  float beta, //inverse temperature
-  float H) //external magnetic field
+eamsim::eamsim(float H) //external magnetic field
   : eamdat()
-  , beta {beta}
   , H {H}
 {
   //check parameters
-  if (!(0.0<=beta&&beta<=2.0)){ throw error("beta out of range");}
-  logger::record("beta = "+cnfs(beta,5,'0',3));
-  if (!(0.0<=H&&H<=2.0)){ throw error("H out of range");}
+  if (!(0.0<=H&&H<=4.0)){ throw error("H out of range");}
   logger::record("H = "+cnfs(H,5,'0',3));
 
   //allocate device memory
@@ -628,6 +623,7 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 void eamsim::init_repib()
 {
   //declare auxiliary variables
+  const float max_beta = 2.0; //maximum beta
   const float bratio = pow(2.0,-4/(NREP-1.0)); //beta ratio
 
   //initialize replica index-beta host array
@@ -636,7 +632,7 @@ void eamsim::init_repib()
     for (int i_b = 0; i_b<NREP; ++i_b) //beta index
     {
       repib_h[NREP*i_l+i_b].idx = i_b;
-      repib_h[NREP*i_l+i_b].beta = pow(bratio,i_b)*beta;
+      repib_h[NREP*i_l+i_b].beta = pow(bratio,i_b)*max_beta;
     }
   }
 

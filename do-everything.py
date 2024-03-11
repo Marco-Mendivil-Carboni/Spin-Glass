@@ -8,25 +8,27 @@ import pandas as pd
 from pathlib import Path
 from subprocess import run
 
+import matplotlib as mpl
+from matplotlib import pyplot as plt
+
 # Define makesim function
 
 filespersim = 1
 
 
-def makesim(simdir, beta, H):
+def makesim(simdir, H):
     newsim = False
-    beta_str = "{:05.3f}".format(beta)
     H_str = "{:05.3f}".format(H)
-    filenamebeg = beta_str + "-" + H_str + "-"
+    filenamebeg = H_str + "-"
 
     pattern = filenamebeg + "*.bin"
     while len(list(simdir.glob(pattern))) < filespersim:
-        run(["./Program/bin/csg-perform", str(simdir), beta_str, H_str])
+        run(["./Program/bin/csg-perform", str(simdir), H_str])
         newsim = True
 
     pattern = filenamebeg + "obs.dat"
     if len(list(simdir.glob(pattern))) == 0 or newsim:
-        run(["./Program/bin/csg-analyze", str(simdir), beta_str, H_str])
+        run(["./Program/bin/csg-analyze", str(simdir), H_str])
 
 
 # Define calcres function
@@ -36,10 +38,9 @@ L = 16
 N = L**3
 
 
-def calcres(simdir, beta, H):
-    beta_str = "{:05.3f}".format(beta)
+def calcres(simdir, H):
     H_str = "{:05.3f}".format(H)
-    filename = beta_str + "-" + H_str + "-obs.dat"
+    filename = H_str + "-obs.dat"
     filepath = simdir / filename
     data_dict = {}
 
@@ -83,23 +84,14 @@ def calcres(simdir, beta, H):
     df.drop(index=range(n_term), level="i_m", inplace=True)
     df_mean = df.groupby(level="i_dr").mean().mean()
 
-    M = N * df_mean["m"]
-    chi_0 = N * (df_mean["|q(0)|^2"] - df_mean["q(0)"] ** 2)
-    chi_k = (
-        N
-        * (
-            df_mean["|q(kx)|^2"]
-            - (df_mean["q_r(kx)"] ** 2 + df_mean["q_i(kx)"] ** 2)
-            + df_mean["|q(ky)|^2"]
-            - (df_mean["q_r(ky)"] ** 2 + df_mean["q_i(ky)"] ** 2)
-            + df_mean["|q(kz)|^2"]
-            - (df_mean["q_r(kz)"] ** 2 + df_mean["q_i(kz)"] ** 2)
-        )
-        / 3
-    )
+    M = df_mean["m"]
+    chi_0 = df_mean["|q(0)|^2"]
+    chi_k = (df_mean["|q(kx)|^2"] + df_mean["|q(ky)|^2"] + df_mean["|q(kz)|^2"]) / 3
     xi = np.sqrt(chi_0 / chi_k - 1) / (2 * np.sin(np.pi / L))
 
-    return [M, chi_0, chi_k, xi]
+    #compute errors (sem) ...
+
+    return [H, M, chi_0, chi_k, xi]
 
 
 # Make simulations and calculate results
@@ -111,38 +103,7 @@ n_points = 16
 simdir.mkdir(exist_ok=True)
 
 res_dict = {}
-
-H = 0.0
-for i in range(n_points):
-    beta = 2 * (i + 1) / n_points
-    makesim(simdir, beta, H)
-    res_dict[(beta, H)] = calcres(simdir, beta, H)
-
-H = 0.5
-for i in range(n_points):
-    beta = 2 * (i + 1) / n_points
-    makesim(simdir, beta, H)
-    res_dict[(beta, H)] = calcres(simdir, beta, H)
-
-beta = 0.5
 for i in range(n_points):
     H = 2 * (i + 1) / n_points
-    makesim(simdir, beta, H)
-    res_dict[(beta, H)] = calcres(simdir, beta, H)
-
-df_res = pd.DataFrame.from_dict(
-    res_dict,
-    orient="index",
-    columns=[
-        "M",
-        "chi(0)",
-        "chi(k)",
-        "xi",
-    ],
-)
-df_res.index = pd.MultiIndex.from_tuples(
-    df_res.index,
-    names=("beta", "H"),
-)
-
-print(df_res)
+    makesim(simdir, H)
+    res_dict[i] = calcres(simdir, H)

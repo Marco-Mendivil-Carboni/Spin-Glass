@@ -15,22 +15,11 @@ __global__ void compute_obs(
   const int i_bt = threadIdx.x; //block thread index
 
   //declare auxiliary variables
+  int l_s[NCP]; //local spin array
   double m_v; //magnetization value
   double2 q_v[NQVAL]; //overlap values
-  __shared__ int s_spin[NCP][N]; //shared spin array
 
-  //compute shared spin array
-  for (int i_s = i_bt; i_s<N; i_s += NTPB) //site index
-  {
-    for (int i_c = 0; i_c<NCP; ++i_c) //copy index
-    {
-      int bit = lattice[N*(NCP*i_gb+i_c)+i_s]&1; //spin bit
-      s_spin[i_c][i_s] = 2*bit-1;
-    }
-  }
-  __syncthreads();
-
-  if (i_bt==0) //compute observables
+  if (i_bt<NREP) //compute observables for each temperature replica
   {
     //initialize observable values
     m_v = 0.0;
@@ -43,14 +32,16 @@ __global__ void compute_obs(
     //iterate over all sites
     for (int i_s = 0; i_s<N; ++i_s) //site index
     {
-      //compute magnetization value
+      //compute local spin array and magnetization value
       for (int i_c = 0; i_c<NCP; ++i_c) //copy index
       {
-        m_v += s_spin[i_c][i_s];
+        int sbit = (lattice[N*(NCP*i_gb+i_c)+i_s]>>i_bt)&1; //spin bit
+        l_s[i_c] = 2*sbit-1;
+        m_v += l_s[i_c];
       }
 
       //calculate local overlap, wave number and position
-      float l_q = s_spin[0][i_s]*s_spin[1][i_s]; //local overlap
+      float l_q = (l_s[0]-l_s[1])*(l_s[2]-l_s[3])/2; //local overlap
       float k = 2*M_PI/L; //wave number
       float x = i_s%L; //x position
       float y = (i_s/L)%L; //y position
@@ -76,11 +67,11 @@ __global__ void compute_obs(
     }
 
     //write observable arrays
-    m[i_gb] = m_v;
+    m[NREP*i_gb+i_bt] = m_v;
     for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
     {
-      q[NQVAL*i_gb+i_qv].x = q_v[i_qv].x;
-      q[NQVAL*i_gb+i_qv].y = q_v[i_qv].y;
+      q[NQVAL*(NREP*i_gb+i_bt)+i_qv].x = q_v[i_qv].x;
+      q[NQVAL*(NREP*i_gb+i_bt)+i_qv].y = q_v[i_qv].y;
     }
   }
 }
@@ -92,12 +83,12 @@ eamana::eamana()
   : eamdat()
 {
   //allocate device memory
-  cuda_check(cudaMalloc(&m,NDIS*sizeof(float)));
-  cuda_check(cudaMalloc(&q,NDIS*NQVAL*sizeof(float2)));
+  cuda_check(cudaMalloc(&m,NDIS*NREP*sizeof(float)));
+  cuda_check(cudaMalloc(&q,NDIS*NREP*NQVAL*sizeof(float2)));
 
   //allocate host memory
-  cuda_check(cudaMallocHost(&m_h,NDIS*sizeof(float)));
-  cuda_check(cudaMallocHost(&q_h,NDIS*NQVAL*sizeof(float2)));
+  cuda_check(cudaMallocHost(&m_h,NDIS*NREP*sizeof(float)));
+  cuda_check(cudaMallocHost(&q_h,NDIS*NREP*NQVAL*sizeof(float2)));
 
   //record success message
   logger::record("eamana initialized");
@@ -130,8 +121,9 @@ void eamana::process_sim_file(
     compute_obs<<<NDIS,NTPB>>>(m,q,lattice);
 
     //copy observable arrays to host
-    cuda_check(cudaMemcpy(m_h,m,NDIS*sizeof(float),cudaMemcpyDeviceToHost));
-    cuda_check(cudaMemcpy(q_h,q,NDIS*NQVAL*sizeof(float2),
+    cuda_check(cudaMemcpy(m_h,m,NDIS*NREP*sizeof(float),
+      cudaMemcpyDeviceToHost));
+    cuda_check(cudaMemcpy(q_h,q,NDIS*NREP*NQVAL*sizeof(float2),
       cudaMemcpyDeviceToHost));
 
     //write observables to text file
@@ -147,11 +139,18 @@ void eamana::write_obs(std::ofstream &txt_out_f) //text output file
 {
   for (int i_dr = 0; i_dr<NDIS; ++i_dr) //disorder realization index
   {
-    txt_out_f<<cnfs(m_h[i_dr],12,' ',6);
-    for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+    for (int i_b = 0; i_b<NREP; ++i_b) //beta index
     {
-      txt_out_f<<cnfs(q_h[NQVAL*i_dr+i_qv].x,12,' ',6);
-      if (i_qv!=0){ txt_out_f<<cnfs(q_h[NQVAL*i_dr+i_qv].y,12,' ',6);}
+      txt_out_f<<cnfs(m_h[NREP*i_dr+i_b],12,' ',6);
+      for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+      {
+        txt_out_f<<cnfs(q_h[NQVAL*(NREP*i_dr+i_b)+i_qv].x,12,' ',6);
+        if (i_qv!=0)
+        {
+          txt_out_f<<cnfs(q_h[NQVAL*(NREP*i_dr+i_b)+i_qv].y,12,' ',6);
+        }
+      }
+      txt_out_f<<"\n";
     }
     txt_out_f<<"\n";
   }
