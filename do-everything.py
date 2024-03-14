@@ -8,8 +8,8 @@ import pandas as pd
 from pathlib import Path
 from subprocess import run
 
-import matplotlib as mpl
-from matplotlib import pyplot as plt
+# import matplotlib as mpl
+# from matplotlib import pyplot as plt
 
 # Define makesim function
 
@@ -34,27 +34,26 @@ def makesim(simdir, H):
 # Define calcres function
 
 L = 16
-
 N = L**3
+NREP = 24
+NDIS = 256
 
 
 def calcres(simdir, H):
     H_str = "{:05.3f}".format(H)
     filename = H_str + "-obs.dat"
     filepath = simdir / filename
-    data_dict = {}
 
-    i_m = 0
-    i_dr = 0
+    idx = 0
+    data_dict = {}
     with open(filepath) as file:
         for line in file:
-            if line == "\n":
-                i_dr = 0
-                i_m += 1
-            else:
-                data_list = [float(num) for num in line.split()]
-                data_dict[(i_m, i_dr)] = data_list
-                i_dr += 1
+            i_m = idx // (NDIS * NREP)
+            i_dr = (idx % (NDIS * NREP)) // NREP
+            i_b = (idx % (NDIS * NREP)) % NREP
+            data_list = [float(num) for num in line.split()]
+            data_dict[(i_m, i_dr, i_b)] = data_list
+            idx += 1
 
     df = pd.DataFrame.from_dict(
         data_dict,
@@ -72,7 +71,7 @@ def calcres(simdir, H):
     )
     df.index = pd.MultiIndex.from_tuples(
         df.index,
-        names=("i_m", "i_dr"),
+        names=("i_m", "i_dr", "i_b"),
     )
 
     df["|q(0)|^2"] = df["q(0)"] ** 2
@@ -82,14 +81,15 @@ def calcres(simdir, H):
 
     n_term = len(df.groupby(level="i_m")) // 2
     df.drop(index=range(n_term), level="i_m", inplace=True)
-    df_mean = df.groupby(level="i_dr").mean().mean()
+    df_mean = df.groupby(level=["i_dr","i_b"]).mean()
+    print(df_mean)
 
     M = df_mean["m"]
     chi_0 = df_mean["|q(0)|^2"]
     chi_k = (df_mean["|q(kx)|^2"] + df_mean["|q(ky)|^2"] + df_mean["|q(kz)|^2"]) / 3
     xi = np.sqrt(chi_0 / chi_k - 1) / (2 * np.sin(np.pi / L))
 
-    #compute errors (sem) ...
+    # compute errors (sem) ...
 
     return [H, M, chi_0, chi_k, xi]
 
@@ -98,12 +98,16 @@ def calcres(simdir, H):
 
 simdir = Path("Simulations")
 
-n_points = 16
+n_points = 12
 
 simdir.mkdir(exist_ok=True)
 
 res_dict = {}
-for i in range(n_points):
-    H = 2 * (i + 1) / n_points
-    makesim(simdir, H)
-    res_dict[i] = calcres(simdir, H)
+# for i in range(n_points):
+#     H = 2 * (i + 1) / n_points
+#     makesim(simdir, H)
+#     res_dict[i] = calcres(simdir, H)
+
+H = 0.0
+makesim(simdir, H)
+print(calcres(simdir, H))

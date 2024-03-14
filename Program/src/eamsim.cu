@@ -45,7 +45,7 @@ inline __device__ void compute_prob(
 inline __device__ void shuffle(
   int *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
-  float *tot_energy, //total energy array
+  float *tot_sum_e, //total energy sum array
   prng *prngs, //PRNG state array
   const int i_bt, //block thread index
   const int i_gt, //grid thread index
@@ -77,8 +77,8 @@ inline __device__ void shuffle(
 
     //compute shuffle probability
     float beta_diff = s_rep_beta[i_0]-s_rep_beta[i_1]; //beta difference
-    float energy_diff = tot_energy[i_0]-tot_energy[i_1]; //energy difference
-    float prob = expf(beta_diff*energy_diff); //shuffle probability
+    float energy_diff = tot_sum_e[i_0]-tot_sum_e[i_1]; //energy difference
+    float prob = expf(-beta_diff*energy_diff); //shuffle probability
 
     if (ran<prob) //accept shuffle
     {
@@ -93,19 +93,19 @@ inline __device__ void shuffle(
 
 //perform skewed sequential sum reduction
 inline __device__ void sum_reduce(
-  float *tot_energy, //total energy array
-  short aux_energy[NREP][NTPB], //auxiliary energy array
+  float *tot_sum, //total sum array
+  short aux_sum[NREP][NTPB], //auxiliary sums array
   const int i_bt) //block thread index
 {
-  //sum auxiliary energies for each temperature replica
+  //sum auxiliary sums for each temperature replica
   if (i_bt<NREP)
   {
-    int sum = 0; //sum of energies
+    int sum = 0; //sum of auxiliary sums
     for (int i_sl = 0; i_sl<NTPB; ++i_sl) //skewed loop index
     {
-      sum += aux_energy[i_bt][(i_sl+i_bt)%NTPB];
+      sum += aux_sum[i_bt][(i_sl+i_bt)%NTPB];
     }
-    tot_energy[i_bt] = sum;
+    tot_sum[i_bt] = sum;
   }
   __syncthreads();
 }
@@ -231,7 +231,8 @@ inline __device__ void perform_PT_shuffle(
   int *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
   const float H, //external magnetic field
-  float *tot_energy, //total energy array
+  float *tot_sum_e, //total energy sum array
+  float *tot_sum_m, //total magnetization sum array
   prng *prngs, //PRNG state array
   bool mode) //shuffle mode
 {
@@ -243,8 +244,7 @@ inline __device__ void perform_PT_shuffle(
 
   //declare auxiliary variables
   __shared__ uint32_t s_slattice[L][L][L]; //shared shuffled lattice array
-  __shared__ short aux_energy[NREP][NTPB]; //auxiliary energy array
-  __shared__ float tot_ext_energy[NREP]; //total external energy array
+  __shared__ short aux_sum[NREP][NTPB]; //auxiliary sums array
 
   //write shared shuffled lattice array
   int xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
@@ -255,10 +255,10 @@ inline __device__ void perform_PT_shuffle(
   }
   __syncthreads();
 
-  //initialize auxiliary energy array to 0
+  //initialize auxiliary sums array to 0
   for (int i_b = 0; i_b<NREP; ++i_b) //beta index
   {
-    aux_energy[i_b][i_bt] = 0;
+    aux_sum[i_b][i_bt] = 0;
   }
   __syncthreads();
 
@@ -292,7 +292,7 @@ inline __device__ void perform_PT_shuffle(
     int_4 = (MASKAB*((cmspin>>(SHIFTSJ+4))&1))^int_4^cmspin;
     int_5 = (MASKAB*((cmspin>>(SHIFTSJ+5))&1))^int_5^cmspin;
 
-    //add energy indexes to auxiliary energy array
+    //add energy indexes to auxiliary sums array
     for (int i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
     {
       uint32_t e_idx = //energy index
@@ -304,19 +304,19 @@ inline __device__ void perform_PT_shuffle(
         ((int_5>>i_ss)&MASKSS);
       for (int shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
       {
-        aux_energy[shift+i_ss][i_bt] += (e_idx>>shift)&MASKES;
+        aux_sum[shift+i_ss][i_bt] += (e_idx>>shift)&MASKES;
       }
     }
   }
   __syncthreads();
 
   //perform sum reduction of energy indexes
-  sum_reduce(tot_energy,aux_energy,i_bt);
+  sum_reduce(tot_sum_e,aux_sum,i_bt);
 
-  //reset auxiliary energy array to 0
+  //reset auxiliary sums array to 0
   for (int i_b = 0; i_b<NREP; ++i_b) //beta index
   {
-    aux_energy[i_b][i_bt] = 0;
+    aux_sum[i_b][i_bt] = 0;
   }
   __syncthreads();
 
@@ -329,32 +329,32 @@ inline __device__ void perform_PT_shuffle(
     uint32_t cmpsin = s_slattice[zc][yc][xc]; //centered multispin
     uint32_t mmpsin = s_slattice[zc][yc][xm]; //matching multispin
 
-    //add spin indexes to auxiliary energy array
+    //add spin indexes to auxiliary sums array
     for (int i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
     {
       for (int shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
       {
         int i_b = shift+i_ss; //beta index
-        aux_energy[i_b][i_bt] += ((cmpsin>>i_b)&1)+((mmpsin>>i_b)&1);
+        aux_sum[i_b][i_bt] += ((cmpsin>>i_b)&1)+((mmpsin>>i_b)&1);
       }
     }
   }
   __syncthreads();
 
   //perform sum reduction of spin indexes
-  sum_reduce(tot_ext_energy,aux_energy,i_bt);
+  sum_reduce(tot_sum_m,aux_sum,i_bt);
 
   //shift both energies to their physical value and add them
   if (i_bt<NREP)
   {
-    tot_energy[i_bt] = 2*tot_energy[i_bt]-6*(N/2);
-    tot_ext_energy[i_bt] = 2*tot_ext_energy[i_bt]-1*N;
-    tot_energy[i_bt] = tot_energy[i_bt]+H*tot_ext_energy[i_bt];
+    tot_sum_e[i_bt] = 2*tot_sum_e[i_bt]-6*(N/2);
+    tot_sum_m[i_bt] = 2*tot_sum_m[i_bt]-1*N;
+    tot_sum_e[i_bt] = -(tot_sum_e[i_bt]+H*tot_sum_m[i_bt]);
   }
   __syncthreads();
 
   //shuffle lattice temperature replicas
-  shuffle(s_rep_idx,s_rep_beta,tot_energy,prngs,i_bt,i_gt,mode);
+  shuffle(s_rep_idx,s_rep_beta,tot_sum_e,prngs,i_bt,i_gt,mode);
 }
 
 //Global Functions
@@ -374,6 +374,7 @@ __global__ void init_prng(
 //run simulation section between measurements
 __global__ void run_simulation_section(
   uint32_t *slattice, //shuffled lattice array
+  obs_s *obs, //observables array
   ib_s *repib, //replica index-beta array
   const float H, //external magnetic field
   prng *prngs) //PRNG state array
@@ -386,7 +387,8 @@ __global__ void run_simulation_section(
   //declare auxiliary variables
   __shared__ int s_rep_idx[NREP]; //shared replica index array
   __shared__ float s_rep_beta[NREP]; //shared replica beta array
-  __shared__ float tot_energy[NREP]; //total energy array
+  __shared__ float tot_sum_e[NREP]; //total energy sum array
+  __shared__ float tot_sum_m[NREP]; //total magnetization sum array
 
   //write shared replica index and beta arrays
   if (i_bt<NREP)
@@ -400,7 +402,8 @@ __global__ void run_simulation_section(
   for (int step = 0; step<SBMEAS; step += SBSHFL) //Monte Carlo step index
   {
     bool mode = (step/SBSHFL)&1; //shuffle mode
-    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,H,tot_energy,prngs,mode);
+    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,H,tot_sum_e,tot_sum_m,
+      prngs,mode);
     perform_MC_steps(slattice,s_rep_beta,H,prngs,SBSHFL);
   }
 
@@ -409,6 +412,15 @@ __global__ void run_simulation_section(
   {
     repib[NREP*i_gb+i_bt].idx = s_rep_idx[i_bt];
     repib[NREP*i_gb+i_bt].beta = s_rep_beta[i_bt];
+  }
+
+  //write observables array
+  if (i_bt<NREP)
+  {
+    int i_d = i_gb/NCP; //disorder index
+    int i_b = repib[NREP*i_gb+i_bt].idx; //beta index
+    atomicAdd(&obs[NREP*i_d+i_b].e,tot_sum_e[i_bt]/(N*NCP));
+    atomicAdd(&obs[NREP*i_d+i_b].m,tot_sum_m[i_bt]/(N*NCP));
   }
 }
 
@@ -448,8 +460,7 @@ __global__ void rearrange(
 
 //EA model simulation constructor
 eamsim::eamsim(float H) //external magnetic field
-  : eamdat()
-  , H {H}
+  : H {H}
 {
   //check parameters
   if (!(0.0<=H&&H<=4.0)){ throw error("H out of range");}
@@ -458,10 +469,14 @@ eamsim::eamsim(float H) //external magnetic field
   //allocate device memory
   cuda_check(cudaMalloc(&repib,NREP*NL*sizeof(ib_s)));
   cuda_check(cudaMalloc(&prngs,NTPB*NL*sizeof(prng)));
+  cuda_check(cudaMalloc(&lattice,N*NL*sizeof(uint32_t)));
   cuda_check(cudaMalloc(&slattice,N*NL*sizeof(uint32_t)));
+  cuda_check(cudaMalloc(&obs,NREP*NDIS*sizeof(obs_s)));
 
   //allocate host memory
   cuda_check(cudaMallocHost(&repib_h,NREP*NL*sizeof(ib_s)));
+  cuda_check(cudaMallocHost(&lattice_h,N*NL*sizeof(uint32_t)));
+  cuda_check(cudaMallocHost(&obs_h,NREP*NDIS*sizeof(obs_s)));
 
   //initialize replica index-beta array
   init_repib();
@@ -479,10 +494,14 @@ eamsim::~eamsim()
   //deallocate device memory
   cuda_check(cudaFree(repib));
   cuda_check(cudaFree(prngs));
+  cuda_check(cudaFree(lattice));
   cuda_check(cudaFree(slattice));
+  cuda_check(cudaFree(obs));
 
   //deallocate host memory
   cuda_check(cudaFreeHost(repib_h));
+  cuda_check(cudaFreeHost(lattice_h));
+  cuda_check(cudaFreeHost(obs_h));
 }
 
 //initialize lattice multispins
@@ -578,18 +597,32 @@ void eamsim::init_lattice()
   logger::record("lattice array initialized");
 }
 
-//read last state from binary file
-void eamsim::read_last_state(std::ifstream &bin_inp_f) //binary input file
+//save state to binary file
+void eamsim::save_checkpoint(std::ofstream &bin_out_f) //binary output file
 {
-  //read all states in the input file
-  for (int i_m = 0; i_m<(SPFILE/SBMEAS); ++i_m) //measurement index
-  {
-    read_state(bin_inp_f);
-  }
+  //write lattice array to binary file
+  bin_out_f.write(reinterpret_cast<char *>(lattice_h),N*NL*sizeof(uint32_t));
+
+  //record success message
+  logger::record("checkpoint saved");
+}
+
+//load state from binary file
+void eamsim::load_checkpoint(std::ifstream &bin_inp_f) //binary input file
+{
+  //read lattice array from binary file
+  bin_inp_f.read(reinterpret_cast<char *>(lattice_h),N*NL*sizeof(uint32_t));
+
+  //copy lattice array to device
+  cuda_check(cudaMemcpy(lattice,lattice_h,N*NL*sizeof(uint32_t),
+    cudaMemcpyHostToDevice));
+
+  //record success message
+  logger::record("checkpoint loaded");
 }
 
 //run whole simulation
-void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
+void eamsim::run_simulation(std::ofstream &txt_out_f) //text output file
 {
   //copy lattice array to shuffled lattice array
   cuda_check(cudaMemcpy(slattice,lattice,N*NL*sizeof(uint32_t),
@@ -601,19 +634,25 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
     //show simulation progress
     logger::show_prog_pc(100.0*step/SPFILE);
 
+    //kernel that sets observables to zero ...
+
     //run simulation section between measurements
-    run_simulation_section<<<NL,CBDIM>>>(slattice,repib,H,prngs);
+    run_simulation_section<<<NL,CBDIM>>>(slattice,obs,repib,H,prngs);
 
     //rearrange lattice temperature replicas
     rearrange<<<NL,NTPB>>>(lattice,repib,slattice);
 
-    //copy lattice array to host
-    cuda_check(cudaMemcpy(lattice_h,lattice,N*NL*sizeof(uint32_t),
+    //copy observables array to host
+    cuda_check(cudaMemcpy(obs_h,obs,NREP*NDIS*sizeof(obs_s),
       cudaMemcpyDeviceToHost));
 
-    //write state to binary file
-    write_state(bin_out_f);
+    //write observables to text file
+    write_obs(txt_out_f); //text output file
   }
+
+  //copy lattice array to host
+  cuda_check(cudaMemcpy(lattice_h,lattice,N*NL*sizeof(uint32_t),
+    cudaMemcpyDeviceToHost));
 
   //record success message
   logger::record("simulation ended");
@@ -639,4 +678,29 @@ void eamsim::init_repib()
   //copy replica index-beta host array to device
   cuda_check(cudaMemcpy(repib,repib_h,NREP*NL*sizeof(ib_s),
     cudaMemcpyHostToDevice));
+}
+
+//write observables to text file
+void eamsim::write_obs(std::ofstream &txt_out_f) //text output file
+{
+  for (int i_d = 0; i_d<NDIS; ++i_d) //disorder index
+  {
+    for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+    {
+      txt_out_f<<cnfs(i_d,4);
+      txt_out_f<<cnfs(repib_h[i_b].beta,12,' ',6);
+      txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].e,12,' ',6);
+      txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].m,12,' ',6);
+      for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+      {
+        txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].q[i_qv].x,12,' ',6);
+        if (i_qv!=0)
+        {
+          txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].q[i_qv].y,12,' ',6);
+        }
+      }
+      txt_out_f<<"\n";
+    }
+  }
+  txt_out_f<<"\n";
 }

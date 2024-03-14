@@ -1,6 +1,6 @@
 //Includes
 
-#include "eamana.cuh" //EA model analysis
+#include "eamsim.cuh" //EA model simulation
 
 #include <iostream> //standard input/output stream objects
 
@@ -26,33 +26,47 @@ int main(
   std::string pattern; //file path pattern
   std::ifstream inp_f; //input file
   std::ofstream out_f; //output file
-  uint n_s_f; //number of simulation files
+  bool prev_sim; //previous simulations
+
+  //create log file in current working directory
+  time_t t_s = time(nullptr); //starting time
+  path = std::to_string(t_s)+".log";
+  logger::set_file(path);
 
   try //main try block
   {
-    //initialize analysis
-    eamana ana; //analysis
+    //initialize simulation
+    eamsim sim = eamsim(H); //simulation
 
-    //count the number of simulation files
-    pattern = simpathbeg+"*.bin";
-    n_s_f = glob_count(pattern);
+    //look for previous simulations
+    pattern = simpathbeg+"obs.dat";
+    prev_sim = glob_count(pattern);
 
-    //open output file
-    path = simpathbeg+"obs.dat";
-    out_f.open(path);
-    check_file(out_f,path);
-
-    //process all simulation files
-    for (uint i_s_f = 0; i_s_f<n_s_f; ++i_s_f) //simulation file index
+    if (!prev_sim) //initialize lattice array
     {
-      path = simpathbeg+cnfs(i_s_f,2,'0')+".bin";
+      sim.init_lattice();
+    }
+    else //load state from binary file
+    {
+      path = simpathbeg+"chkpt.bin";
       inp_f.open(path,std::ios::binary);
       check_file(inp_f,path);
-      ana.process_sim_file(out_f,inp_f);
+      sim.load_checkpoint(inp_f);
       inp_f.close();
     }
 
-    //close output file
+    //run whole simulation
+    path = simpathbeg+"obs.dat";
+    out_f.open(path,std::ios::app);
+    check_file(out_f,path);
+    sim.run_simulation(out_f);
+    out_f.close();
+
+    //save state to binary file
+    path = simpathbeg+"chkpt.bin";
+    out_f.open(path,std::ios::binary);
+    check_file(out_f,path);
+    sim.save_checkpoint(out_f);
     out_f.close();
   }
   catch (const error &err) //caught error
@@ -61,6 +75,11 @@ int main(
     logger::record(err.what());
     return EXIT_FAILURE;
   }
+
+  //remove log file
+  logger::set_file("/dev/null");
+  path = std::to_string(t_s)+".log";
+  std::remove(path.c_str());
 
   //exit program successfully
   return EXIT_SUCCESS;
