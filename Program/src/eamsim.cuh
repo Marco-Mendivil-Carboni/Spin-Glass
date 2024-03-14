@@ -56,8 +56,8 @@ struct ib_s //index-beta struct
 
 struct obs_s //observables struct
 {
-  float e; //energy
-  float m; //magnetization
+  float e[NCP]; //energy
+  float m[NCP]; //magnetization
   float2 q[NQVAL]; //overlap
 };
 

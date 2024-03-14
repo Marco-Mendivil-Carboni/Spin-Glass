@@ -14,9 +14,9 @@ inline __device__ void init_prob(
   //initialize all entries to 1
   if (i_bt<PTABW)
   {
-    for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+    for (int i_r = 0; i_r<NREP; ++i_r) //replica index
     {
-      s_prob[i_b][i_bt] = UINT_MAX;
+      s_prob[i_r][i_bt] = UINT_MAX;
     }
   }
   __syncthreads();
@@ -32,10 +32,10 @@ inline __device__ void compute_prob(
   //compute all possible probabilities
   if (i_bt<NPROB)
   {
-    for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+    for (int i_r = 0; i_r<NREP; ++i_r) //replica index
     {
       float energy = -(i_bt-6-H-((1-2*H)*(i_bt&1))); //spin energy
-      s_prob[i_b][i_bt] = expf(s_rep_beta[i_b]*2*energy)*UINT_MAX;
+      s_prob[i_r][i_bt] = expf(s_rep_beta[i_r]*2*energy)*UINT_MAX;
     }
   }
   __syncthreads();
@@ -45,7 +45,7 @@ inline __device__ void compute_prob(
 inline __device__ void shuffle(
   int *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
-  float *tot_sum_e, //total energy sum array
+  float *s_tot_sum_e, //shared total energy sum array
   prng *prngs, //PRNG state array
   const int i_bt, //block thread index
   const int i_gt, //grid thread index
@@ -77,7 +77,7 @@ inline __device__ void shuffle(
 
     //compute shuffle probability
     float beta_diff = s_rep_beta[i_0]-s_rep_beta[i_1]; //beta difference
-    float energy_diff = tot_sum_e[i_0]-tot_sum_e[i_1]; //energy difference
+    float energy_diff = s_tot_sum_e[i_0]-s_tot_sum_e[i_1]; //energy difference
     float prob = expf(-beta_diff*energy_diff); //shuffle probability
 
     if (ran<prob) //accept shuffle
@@ -93,8 +93,8 @@ inline __device__ void shuffle(
 
 //perform skewed sequential sum reduction
 inline __device__ void sum_reduce(
-  float *tot_sum, //total sum array
-  short aux_sum[NREP][NTPB], //auxiliary sums array
+  float *s_tot_sum, //shared total sum array
+  short s_aux_sum[NREP][NTPB], //shared auxiliary sums array
   const int i_bt) //block thread index
 {
   //sum auxiliary sums for each temperature replica
@@ -103,9 +103,9 @@ inline __device__ void sum_reduce(
     int sum = 0; //sum of auxiliary sums
     for (int i_sl = 0; i_sl<NTPB; ++i_sl) //skewed loop index
     {
-      sum += aux_sum[i_bt][(i_sl+i_bt)%NTPB];
+      sum += s_aux_sum[i_bt][(i_sl+i_bt)%NTPB];
     }
-    tot_sum[i_bt] = sum;
+    s_tot_sum[i_bt] = sum;
   }
   __syncthreads();
 }
@@ -231,8 +231,8 @@ inline __device__ void perform_PT_shuffle(
   int *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
   const float H, //external magnetic field
-  float *tot_sum_e, //total energy sum array
-  float *tot_sum_m, //total magnetization sum array
+  float *s_tot_sum_e, //shared total energy sum array
+  float *s_tot_sum_m, //shared total magnetization sum array
   prng *prngs, //PRNG state array
   bool mode) //shuffle mode
 {
@@ -244,7 +244,7 @@ inline __device__ void perform_PT_shuffle(
 
   //declare auxiliary variables
   __shared__ uint32_t s_slattice[L][L][L]; //shared shuffled lattice array
-  __shared__ short aux_sum[NREP][NTPB]; //auxiliary sums array
+  __shared__ short s_aux_sum[NREP][NTPB]; //shared auxiliary sums array
 
   //write shared shuffled lattice array
   int xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
@@ -255,10 +255,10 @@ inline __device__ void perform_PT_shuffle(
   }
   __syncthreads();
 
-  //initialize auxiliary sums array to 0
-  for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+  //initialize shared auxiliary sums array to 0
+  for (int i_r = 0; i_r<NREP; ++i_r) //replica index
   {
-    aux_sum[i_b][i_bt] = 0;
+    s_aux_sum[i_r][i_bt] = 0;
   }
   __syncthreads();
 
@@ -292,7 +292,7 @@ inline __device__ void perform_PT_shuffle(
     int_4 = (MASKAB*((cmspin>>(SHIFTSJ+4))&1))^int_4^cmspin;
     int_5 = (MASKAB*((cmspin>>(SHIFTSJ+5))&1))^int_5^cmspin;
 
-    //add energy indexes to auxiliary sums array
+    //add energy indexes to shared auxiliary sums array
     for (int i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
     {
       uint32_t e_idx = //energy index
@@ -304,19 +304,19 @@ inline __device__ void perform_PT_shuffle(
         ((int_5>>i_ss)&MASKSS);
       for (int shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
       {
-        aux_sum[shift+i_ss][i_bt] += (e_idx>>shift)&MASKES;
+        s_aux_sum[shift+i_ss][i_bt] += (e_idx>>shift)&MASKES;
       }
     }
   }
   __syncthreads();
 
   //perform sum reduction of energy indexes
-  sum_reduce(tot_sum_e,aux_sum,i_bt);
+  sum_reduce(s_tot_sum_e,s_aux_sum,i_bt);
 
-  //reset auxiliary sums array to 0
-  for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+  //reset shared auxiliary sums array to 0
+  for (int i_r = 0; i_r<NREP; ++i_r) //replica index
   {
-    aux_sum[i_b][i_bt] = 0;
+    s_aux_sum[i_r][i_bt] = 0;
   }
   __syncthreads();
 
@@ -329,32 +329,32 @@ inline __device__ void perform_PT_shuffle(
     uint32_t cmpsin = s_slattice[zc][yc][xc]; //centered multispin
     uint32_t mmpsin = s_slattice[zc][yc][xm]; //matching multispin
 
-    //add spin indexes to auxiliary sums array
+    //add spin indexes to shared auxiliary sums array
     for (int i_ss = 0; i_ss<NSPS; ++i_ss) //segment spin index
     {
       for (int shift = 0; shift<SHIFTMS; shift += NSPS) //segment shift
       {
-        int i_b = shift+i_ss; //beta index
-        aux_sum[i_b][i_bt] += ((cmpsin>>i_b)&1)+((mmpsin>>i_b)&1);
+        int i_r = shift+i_ss; //replica index
+        s_aux_sum[i_r][i_bt] += ((cmpsin>>i_r)&1)+((mmpsin>>i_r)&1);
       }
     }
   }
   __syncthreads();
 
   //perform sum reduction of spin indexes
-  sum_reduce(tot_sum_m,aux_sum,i_bt);
+  sum_reduce(s_tot_sum_m,s_aux_sum,i_bt);
 
   //shift both energies to their physical value and add them
   if (i_bt<NREP)
   {
-    tot_sum_e[i_bt] = 2*tot_sum_e[i_bt]-6*(N/2);
-    tot_sum_m[i_bt] = 2*tot_sum_m[i_bt]-1*N;
-    tot_sum_e[i_bt] = -(tot_sum_e[i_bt]+H*tot_sum_m[i_bt]);
+    s_tot_sum_e[i_bt] = 2*s_tot_sum_e[i_bt]-6*(N/2);
+    s_tot_sum_m[i_bt] = 2*s_tot_sum_m[i_bt]-1*N;
+    s_tot_sum_e[i_bt] = -(s_tot_sum_e[i_bt]+H*s_tot_sum_m[i_bt]);
   }
   __syncthreads();
 
   //shuffle lattice temperature replicas
-  shuffle(s_rep_idx,s_rep_beta,tot_sum_e,prngs,i_bt,i_gt,mode);
+  shuffle(s_rep_idx,s_rep_beta,s_tot_sum_e,prngs,i_bt,i_gt,mode);
 }
 
 //Global Functions
@@ -387,8 +387,8 @@ __global__ void run_simulation_section(
   //declare auxiliary variables
   __shared__ int s_rep_idx[NREP]; //shared replica index array
   __shared__ float s_rep_beta[NREP]; //shared replica beta array
-  __shared__ float tot_sum_e[NREP]; //total energy sum array
-  __shared__ float tot_sum_m[NREP]; //total magnetization sum array
+  __shared__ float s_tot_sum_e[NREP]; //shared total energy sum array
+  __shared__ float s_tot_sum_m[NREP]; //shared total magnetization sum array
 
   //write shared replica index and beta arrays
   if (i_bt<NREP)
@@ -402,7 +402,7 @@ __global__ void run_simulation_section(
   for (int step = 0; step<SBMEAS; step += SBSHFL) //Monte Carlo step index
   {
     bool mode = (step/SBSHFL)&1; //shuffle mode
-    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,H,tot_sum_e,tot_sum_m,
+    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,H,s_tot_sum_e,s_tot_sum_m,
       prngs,mode);
     perform_MC_steps(slattice,s_rep_beta,H,prngs,SBSHFL);
   }
@@ -418,9 +418,10 @@ __global__ void run_simulation_section(
   if (i_bt<NREP)
   {
     int i_d = i_gb/NCP; //disorder index
-    int i_b = repib[NREP*i_gb+i_bt].idx; //beta index
-    atomicAdd(&obs[NREP*i_d+i_b].e,tot_sum_e[i_bt]/(N*NCP));
-    atomicAdd(&obs[NREP*i_d+i_b].m,tot_sum_m[i_bt]/(N*NCP));
+    int i_r = s_rep_idx[i_bt]; //replica index
+    int i_c = i_gb%NCP; //copy index
+    obs[NREP*i_d+i_r].e[i_c] = s_tot_sum_e[i_bt]/N;
+    obs[NREP*i_d+i_r].m[i_c] = s_tot_sum_m[i_bt]/N;
   }
 }
 
@@ -448,9 +449,9 @@ __global__ void rearrange(
   {
     smspin = slattice[N*i_gb+i_s];
     rmspin = 0;
-    for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+    for (int i_r = 0; i_r<NREP; ++i_r) //replica index
     {
-      rmspin |= ((smspin>>i_b)&1)<<s_rep_idx[i_b];
+      rmspin |= ((smspin>>i_r)&1)<<s_rep_idx[i_r];
     }
     lattice[N*i_gb+i_s] = (lattice[N*i_gb+i_s]&MASKAJ)|rmspin;
   }
@@ -634,13 +635,14 @@ void eamsim::run_simulation(std::ofstream &txt_out_f) //text output file
     //show simulation progress
     logger::show_prog_pc(100.0*step/SPFILE);
 
-    //kernel that sets observables to zero ...
-
     //run simulation section between measurements
     run_simulation_section<<<NL,CBDIM>>>(slattice,obs,repib,H,prngs);
 
     //rearrange lattice temperature replicas
     rearrange<<<NL,NTPB>>>(lattice,repib,slattice);
+
+    //compute overlap values
+    // compute_q_val();
 
     //copy observables array to host
     cuda_check(cudaMemcpy(obs_h,obs,NREP*NDIS*sizeof(obs_s),
@@ -668,10 +670,10 @@ void eamsim::init_repib()
   //initialize replica index-beta host array
   for (int i_l = 0; i_l<NL; ++i_l) //lattice index
   {
-    for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+    for (int i_r = 0; i_r<NREP; ++i_r) //replica index
     {
-      repib_h[NREP*i_l+i_b].idx = i_b;
-      repib_h[NREP*i_l+i_b].beta = pow(bratio,i_b)*max_beta;
+      repib_h[NREP*i_l+i_r].idx = i_r;
+      repib_h[NREP*i_l+i_r].beta = pow(bratio,i_r)*max_beta;
     }
   }
 
@@ -685,18 +687,22 @@ void eamsim::write_obs(std::ofstream &txt_out_f) //text output file
 {
   for (int i_d = 0; i_d<NDIS; ++i_d) //disorder index
   {
-    for (int i_b = 0; i_b<NREP; ++i_b) //beta index
+    for (int i_r = 0; i_r<NREP; ++i_r) //replica index
     {
-      txt_out_f<<cnfs(i_d,4);
-      txt_out_f<<cnfs(repib_h[i_b].beta,12,' ',6);
-      txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].e,12,' ',6);
-      txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].m,12,' ',6);
-      for(int i_qv = 0; i_qv<NQVAL; ++i_qv) //overlap value index
+      for(int i_c = 0; i_c<NCP; ++i_c) //copy index
       {
-        txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].q[i_qv].x,12,' ',6);
-        if (i_qv!=0)
+        txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].e[i_c],12,' ',6);
+      }
+      for(int i_c = 0; i_c<NCP; ++i_c) //copy index
+      {
+        txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].m[i_c],12,' ',6);
+      }
+      for(int i_q = 0; i_q<NQVAL; ++i_q) //overlap value index
+      {
+        txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].q[i_q].x,12,' ',6);
+        if (i_q!=0)
         {
-          txt_out_f<<cnfs(obs_h[NREP*i_d+i_b].q[i_qv].y,12,' ',6);
+          txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].q[i_q].y,12,' ',6);
         }
       }
       txt_out_f<<"\n";
