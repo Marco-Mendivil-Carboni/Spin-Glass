@@ -8,8 +8,6 @@ NVCCLINKS = -lcurand
 
 #Targets
 
-all: bin/csg
-
 bin/csg: bin/util.o bin/eamsim.o bin/main.o
 	$(NVCC) $(NVCCFLAGS) $^ -o $@ $(NVCCLINKS)
 

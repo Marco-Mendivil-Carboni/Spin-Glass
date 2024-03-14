@@ -230,9 +230,9 @@ inline __device__ void perform_PT_shuffle(
   uint32_t *slattice, //shuffled lattice array
   int *s_rep_idx, //shared replica index array
   float *s_rep_beta, //shared replica beta array
-  const float H, //external magnetic field
   float *s_tot_sum_e, //shared total energy sum array
   float *s_tot_sum_m, //shared total magnetization sum array
+  const float H, //external magnetic field
   prng *prngs, //PRNG state array
   bool mode) //shuffle mode
 {
@@ -402,7 +402,7 @@ __global__ void run_simulation_section(
   for (int step = 0; step<SBMEAS; step += SBSHFL) //Monte Carlo step index
   {
     bool mode = (step/SBSHFL)&1; //shuffle mode
-    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,H,s_tot_sum_e,s_tot_sum_m,
+    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,s_tot_sum_e,s_tot_sum_m,H,
       prngs,mode);
     perform_MC_steps(slattice,s_rep_beta,H,prngs,SBSHFL);
   }
@@ -454,6 +454,66 @@ __global__ void rearrange(
       rmspin |= ((smspin>>i_r)&1)<<s_rep_idx[i_r];
     }
     lattice[N*i_gb+i_s] = (lattice[N*i_gb+i_s]&MASKAJ)|rmspin;
+  }
+}
+
+//compute overlap
+__global__ void compute_q(
+  obs_s *obs, //observables array
+  uint32_t *lattice) //lattice array
+{
+  //calculate indexes
+  const int i_gb = blockIdx.x; //grid block index
+  const int i_bt = threadIdx.x; //block thread index
+
+  //declare auxiliary variables
+  int l_s[NCP]; //local spin array
+  float2 q[NQVAL]; //overlap
+
+  //compute overlap values for each temperature replica
+  if (i_bt<NREP)
+  {
+    //initialize overlap values
+    for(int i_q = 0; i_q<NQVAL; ++i_q) //overlap value index
+    {
+      q[i_q].x = 0.0;
+      q[i_q].y = 0.0;
+    }
+
+    //iterate over all sites
+    for (int i_s = 0; i_s<N; ++i_s) //site index
+    {
+      //compute local spin array
+      for (int i_c = 0; i_c<NCP; ++i_c) //copy index
+      {
+        int sbit = (lattice[N*(NCP*i_gb+i_c)+i_s]>>i_bt)&1; //spin bit
+        l_s[i_c] = 2*sbit-1;
+      }
+
+      //calculate local overlap, wave number and position
+      float l_q = l_s[0]*l_s[1]; //local overlap
+      float k = 2*M_PI/L; //wave number
+      float x = i_s%L; //x position
+      float y = (i_s/L)%L; //y position
+      float z = (i_s/L)/L; //z position
+
+      //compute overlap values
+      q[0].x += l_q*cosf(0);
+      q[0].y += l_q*sinf(0);
+      q[1].x += l_q*cosf(k*x);
+      q[1].y += l_q*sinf(k*x);
+      q[2].x += l_q*cosf(k*y);
+      q[2].y += l_q*sinf(k*y);
+      q[3].x += l_q*cosf(k*z);
+      q[3].y += l_q*sinf(k*z);
+    }
+
+    //write observables array
+    for(int i_q = 0; i_q<NQVAL; ++i_q) //overlap value index
+    {
+      obs[NREP*i_gb+i_bt].q[i_q].x = q[i_q].x/N;
+      obs[NREP*i_gb+i_bt].q[i_q].y = q[i_q].y/N;
+    }
   }
 }
 
@@ -580,7 +640,7 @@ void eamsim::init_lattice()
     {
       init_coupling_constants(gen,&lattice_h[N*i_l]);
     }
-    else //use the same coupling constants for adjacent realizations
+    else //use the same coupling constants for adjacent lattices
     {
       cuda_check(cudaMemcpy(&lattice_h[N*i_l],&lattice_h[N*(i_l-1)],
         N*sizeof(uint32_t),cudaMemcpyHostToHost));
@@ -641,8 +701,8 @@ void eamsim::run_simulation(std::ofstream &txt_out_f) //text output file
     //rearrange lattice temperature replicas
     rearrange<<<NL,NTPB>>>(lattice,repib,slattice);
 
-    //compute overlap values
-    // compute_q_val();
+    //compute overlap
+    compute_q<<<NDIS,NTPB>>>(obs,lattice);
 
     //copy observables array to host
     cuda_check(cudaMemcpy(obs_h,obs,NREP*NDIS*sizeof(obs_s),
