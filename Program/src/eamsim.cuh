@@ -14,7 +14,6 @@ static constexpr int N = L*L*L; //number of sites
 
 static constexpr int NDIS = 256; //number of disorder realizations
 static constexpr int NCP = 2; //number of disorder realization copies
-
 static constexpr int NL = NDIS*NCP; //number of lattices
 
 static constexpr int SBSHFL = 32; //Monte Carlo steps between shuffles
@@ -37,8 +36,6 @@ static constexpr int SHIFTSJ = 26; //single coupling constant shift
 static constexpr int NPROB = 14; //number of possible probabilities
 static constexpr int PTABW = 16; //probability lookup table width
 
-static constexpr int NQVAL = 4; //number of computed overlap values
-
 static constexpr int NTPB = L*L; //number of threads per block
 static constexpr dim3 CBDIM = {L/2,L,2}; //checkerboard block dimensions
 
@@ -58,7 +55,9 @@ struct obs_s //observables struct
 {
   float e[NCP]; //energy
   float m[NCP]; //magnetization
-  float2 q[NQVAL]; //overlap
+  float q_0; //overlap value 0
+  float q_r[3]; //Re overlap values
+  float q_i[3]; //Im overlap values
 };
 
 //Classes
@@ -85,7 +84,7 @@ class eamsim //EA model simulation
   void load_checkpoint(std::ifstream &bin_inp_f); //binary input file
 
   //run whole simulation
-  void run_simulation(std::ofstream &txt_out_f); //text output file
+  void run_simulation(std::ofstream &bin_out_f); //binary output file
 
   private:
 
@@ -107,9 +106,6 @@ class eamsim //EA model simulation
 
   //initialize replica index-beta array
   void init_repib();
-
-  //write observables to text file
-  void write_obs(std::ofstream &txt_out_f); //text output file
 };
 
 #endif //MMC_EAMSIM_H

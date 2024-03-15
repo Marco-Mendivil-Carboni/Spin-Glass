@@ -468,16 +468,19 @@ __global__ void compute_q(
 
   //declare auxiliary variables
   int l_s[NCP]; //local spin array
-  float2 q[NQVAL]; //overlap
+  float q_0; //overlap value 0
+  float q_r[3]; //Re overlap values
+  float q_i[3]; //Im overlap values
 
   //compute overlap values for each temperature replica
   if (i_bt<NREP)
   {
     //initialize overlap values
-    for(int i_q = 0; i_q<NQVAL; ++i_q) //overlap value index
+    q_0 = 0.0;
+    for(int i_q = 0; i_q<3; ++i_q) //overlap value index
     {
-      q[i_q].x = 0.0;
-      q[i_q].y = 0.0;
+      q_r[i_q] = 0.0;
+      q_i[i_q] = 0.0;
     }
 
     //iterate over all sites
@@ -490,29 +493,29 @@ __global__ void compute_q(
         l_s[i_c] = 2*sbit-1;
       }
 
-      //calculate local overlap, wave number and position
+      //calculate local overlap, wave vector norm and position
       float l_q = l_s[0]*l_s[1]; //local overlap
-      float k = 2*M_PI/L; //wave number
+      float k = 2*M_PI/L; //wave vector norm
       float x = i_s%L; //x position
       float y = (i_s/L)%L; //y position
       float z = (i_s/L)/L; //z position
 
       //compute overlap values
-      q[0].x += l_q*cosf(0);
-      q[0].y += l_q*sinf(0);
-      q[1].x += l_q*cosf(k*x);
-      q[1].y += l_q*sinf(k*x);
-      q[2].x += l_q*cosf(k*y);
-      q[2].y += l_q*sinf(k*y);
-      q[3].x += l_q*cosf(k*z);
-      q[3].y += l_q*sinf(k*z);
+      q_0 += l_q;
+      q_r[0] += l_q*cosf(k*x);
+      q_i[0] += l_q*sinf(k*x);
+      q_r[1] += l_q*cosf(k*y);
+      q_i[1] += l_q*sinf(k*y);
+      q_r[2] += l_q*cosf(k*z);
+      q_i[2] += l_q*sinf(k*z);
     }
 
     //write observables array
-    for(int i_q = 0; i_q<NQVAL; ++i_q) //overlap value index
+    obs[NREP*i_gb+i_bt].q_0 = q_0/N;
+    for(int i_q = 0; i_q<3; ++i_q) //overlap value index
     {
-      obs[NREP*i_gb+i_bt].q[i_q].x = q[i_q].x/N;
-      obs[NREP*i_gb+i_bt].q[i_q].y = q[i_q].y/N;
+      obs[NREP*i_gb+i_bt].q_r[i_q] = q_r[i_q]/N;
+      obs[NREP*i_gb+i_bt].q_i[i_q] = q_i[i_q]/N;
     }
   }
 }
@@ -683,7 +686,7 @@ void eamsim::load_checkpoint(std::ifstream &bin_inp_f) //binary input file
 }
 
 //run whole simulation
-void eamsim::run_simulation(std::ofstream &txt_out_f) //text output file
+void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 {
   //copy lattice array to shuffled lattice array
   cuda_check(cudaMemcpy(slattice,lattice,N*NL*sizeof(uint32_t),
@@ -708,8 +711,8 @@ void eamsim::run_simulation(std::ofstream &txt_out_f) //text output file
     cuda_check(cudaMemcpy(obs_h,obs,NREP*NDIS*sizeof(obs_s),
       cudaMemcpyDeviceToHost));
 
-    //write observables to text file
-    write_obs(txt_out_f); //text output file
+    //write observables to binary file
+    bin_out_f.write(reinterpret_cast<char *>(obs_h),NREP*NDIS*sizeof(obs_s));
   }
 
   //copy lattice array to host
@@ -740,33 +743,4 @@ void eamsim::init_repib()
   //copy replica index-beta host array to device
   cuda_check(cudaMemcpy(repib,repib_h,NREP*NL*sizeof(ib_s),
     cudaMemcpyHostToDevice));
-}
-
-//write observables to text file
-void eamsim::write_obs(std::ofstream &txt_out_f) //text output file
-{
-  for (int i_d = 0; i_d<NDIS; ++i_d) //disorder index
-  {
-    for (int i_r = 0; i_r<NREP; ++i_r) //replica index
-    {
-      for(int i_c = 0; i_c<NCP; ++i_c) //copy index
-      {
-        txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].e[i_c],12,' ',6);
-      }
-      for(int i_c = 0; i_c<NCP; ++i_c) //copy index
-      {
-        txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].m[i_c],12,' ',6);
-      }
-      for(int i_q = 0; i_q<NQVAL; ++i_q) //overlap value index
-      {
-        txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].q[i_q].x,12,' ',6);
-        if (i_q!=0)
-        {
-          txt_out_f<<cnfs(obs_h[NREP*i_d+i_r].q[i_q].y,12,' ',6);
-        }
-      }
-      txt_out_f<<"\n";
-    }
-  }
-  txt_out_f<<"\n";
 }

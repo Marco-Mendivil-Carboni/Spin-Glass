@@ -49,10 +49,10 @@ def calcres(simdir, H):
     with open(filepath) as file:
         for line in file:
             i_m = idx // (NDIS * NREP)
-            i_dr = (idx % (NDIS * NREP)) // NREP
-            i_b = (idx % (NDIS * NREP)) % NREP
+            i_d = (idx % (NDIS * NREP)) // NREP
+            i_r = (idx % (NDIS * NREP)) % NREP
             data_list = [float(num) for num in line.split()]
-            data_dict[(i_m, i_dr, i_b)] = data_list
+            data_dict[(i_m, i_d, i_r)] = data_list
             idx += 1
 
     df = pd.DataFrame.from_dict(

@@ -39,7 +39,7 @@ int main(
     eamsim sim = eamsim(H); //simulation
 
     //look for previous simulations
-    pattern = simpathbeg+"obs.dat";
+    pattern = simpathbeg+"obs.bin";
     prev_sim = glob_count(pattern);
 
     if (!prev_sim) //initialize lattice array
@@ -56,8 +56,8 @@ int main(
     }
 
     //run whole simulation
-    path = simpathbeg+"obs.dat";
-    out_f.open(path,std::ios::app);
+    path = simpathbeg+"obs.bin";
+    out_f.open(path,std::ios::binary|std::ios::app);
     check_file(out_f,path);
     sim.run_simulation(out_f);
     out_f.close();
