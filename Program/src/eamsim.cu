@@ -387,6 +387,7 @@ __global__ void run_simulation_section(
   //declare auxiliary variables
   __shared__ int s_rep_idx[NREP]; //shared replica index array
   __shared__ float s_rep_beta[NREP]; //shared replica beta array
+  __shared__ int s_prev_rep_idx[NREP]; //shared previous replica index array
   __shared__ float s_tot_sum_e[NREP]; //shared total energy sum array
   __shared__ float s_tot_sum_m[NREP]; //shared total magnetization sum array
 
@@ -402,6 +403,7 @@ __global__ void run_simulation_section(
   for (int step = 0; step<SBMEAS; step += SBSHFL) //Monte Carlo step index
   {
     bool mode = (step/SBSHFL)&1; //shuffle mode
+    if (i_bt<NREP){ s_prev_rep_idx[i_bt] = s_rep_idx[i_bt];}
     perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,s_tot_sum_e,s_tot_sum_m,H,
       prngs,mode);
     perform_MC_steps(slattice,s_rep_beta,H,prngs,SBSHFL);
@@ -418,7 +420,7 @@ __global__ void run_simulation_section(
   if (i_bt<NREP)
   {
     int i_d = i_gb/NCP; //disorder index
-    int i_r = s_rep_idx[i_bt]; //replica index
+    int i_r = s_prev_rep_idx[i_bt]; //replica index
     int i_c = i_gb%NCP; //copy index
     obs[NREP*i_d+i_r].e[i_c] = s_tot_sum_e[i_bt]/N;
     obs[NREP*i_d+i_r].m[i_c] = s_tot_sum_m[i_bt]/N;
