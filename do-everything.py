@@ -6,11 +6,23 @@ import numpy as np
 
 from pathlib import Path
 
-# import matplotlib as mpl
+import matplotlib as mpl
 from matplotlib import pyplot as plt
 
+# Set matplotlib parameters
 
-# Define calcres function
+# mpl.use("pdf")
+
+# mpl.rcParams["text.usetex"] = True
+# mpl.rcParams["font.family"] = "serif"
+
+# cm = 1 / 2.54
+# mpl.rcParams["figure.figsize"] = [12.00 * cm, 8.00 * cm]
+# mpl.rcParams["figure.constrained_layout.use"] = True
+
+# mpl.rcParams["legend.frameon"] = False
+
+# Define analyze_obs function
 
 L = 16
 N = L**3
@@ -28,42 +40,75 @@ obs_dt = np.dtype(
     ]
 )
 
+beta = np.logspace(1, -3, num=NREP, base=2.0)
 
-def calc_res(sim_dir, H):
+
+def analyze_obs(sim_dir, H):
     file_path = sim_dir / ("{:05.3f}".format(H) + "-obs.bin")
 
     data = np.fromfile(file_path, dtype=obs_dt)
     data = data.reshape(-1, NDIS, NREP)
     data = np.delete(data, range(len(data) // 4), axis=0)
-    print(data.shape)
 
-    something = (data["e"].mean(axis=0)).mean(axis=2)
-    print(something.shape)
-    something = something.mean(axis=0)
-    plt.plot(something)
+    e_avg = np.average(np.average(data["e"], axis=0), axis=2)
+    e_std = np.average(np.std(data["e"], axis=0), axis=2)
+    e_avg_avg = np.average(e_avg, axis=0)
+    e_avg_std = np.std(e_avg, axis=0)
+    e_std_avg = np.average(e_std, axis=0)
+
+    m_avg = np.average(np.average(data["m"], axis=0), axis=2)
+    m_std = np.average(np.std(data["m"], axis=0), axis=2)
+    m_avg_avg = np.average(m_avg, axis=0)
+    m_avg_std = np.std(m_avg, axis=0)
+    m_std_avg = np.average(m_std, axis=0)
+
+    q_0_2_avg = np.average(data["q_0"] ** 2, axis=0)
+    q_0_2_avg_avg = np.average(q_0_2_avg, axis=0)
+
+    q_0_avg = np.average(data["q_0"], axis=0)
+    q_0_avg_avg = np.average(q_0_avg, axis=0)
+
+    q_2_avg = np.average(data["q_r"] ** 2 + data["q_i"] ** 2, axis=0)
+    q_2_avg_avg = np.average(q_2_avg, axis=0)
+
+    q_r_avg = np.average(data["q_r"], axis=0)
+    q_r_avg_avg = np.average(q_r_avg, axis=0)
+
+    q_i_avg = np.average(data["q_i"], axis=0)
+    q_i_avg_avg = np.average(q_i_avg, axis=0)
+
+    chi_0_avg = q_0_2_avg_avg - q_0_avg_avg**2
+
+    chi_avg = np.average(q_2_avg_avg - (q_r_avg_avg**2 + q_i_avg_avg**2), axis=1)
+
+    xi_avg = np.sqrt(np.maximum(chi_0_avg / chi_avg - 1, np.zeros(NREP))) / (
+        2 * np.sin(np.pi / L)
+    )
+
+    plt.plot(beta, e_avg_avg / 100)
+    plt.plot(beta, e_std_avg)
+    plt.plot(beta, 2 * e_avg_std)
+    plt.plot(beta, m_avg_avg)
+    plt.plot(beta, m_std_avg)
+    plt.plot(beta, m_avg_std)
+    plt.plot(beta, chi_0_avg)
+    plt.plot(beta, chi_avg)
+    plt.plot(beta, xi_avg / 100)
+
+    plt.xscale("log")
     plt.show()
-    # ...
-
-    # for line in file:
-    #     i_m = idx // (NDIS * NREP)
-    #     i_d = (idx % (NDIS * NREP)) // NREP
-    #     i_r = (idx % (NDIS * NREP)) % NREP
-    #     idx += 1
-
-    # compute errors (sem) ...
 
     return [H]
 
 
-# Make simulations and calculate results
+# Analyze observables
 
 simdir = Path("Simulations")
 
-n_points = 12
+n_points = 1
 
-# for i in range(n_points):
-#     H = (i + 1) / n_points
-#     ... = calc_res(simdir, H)
+for i in range(n_points):
+    H = i / 8
+    print(analyze_obs(simdir, H))
 
-H = 0.0
-print(calc_res(simdir, H))
+# Make plots
