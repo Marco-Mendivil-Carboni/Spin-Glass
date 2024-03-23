@@ -61,7 +61,7 @@ inline __device__ void shuffle(
   if (i_bt<NREP){ s_rai[s_rep_idx[i_bt]] = i_bt;}
   __syncthreads ();
 
-  if (!mode) //consider even pairs of temperature replicas
+  if (mode==0) //consider even pairs of temperature replicas
   {
     i_0 = s_rai[(i_bt<<1)+0]; i_1 = s_rai[(i_bt<<1)+1]; max_i_bt = NREP/2;
   }
@@ -78,7 +78,7 @@ inline __device__ void shuffle(
     //compute shuffle probability
     float beta_diff = s_rep_beta[i_0]-s_rep_beta[i_1]; //beta difference
     float energy_diff = s_tot_sum_e[i_0]-s_tot_sum_e[i_1]; //energy difference
-    float prob = expf(-beta_diff*energy_diff); //shuffle probability
+    float prob = expf(beta_diff*energy_diff); //shuffle probability
 
     if (ran<prob) //accept shuffle
     {
@@ -471,8 +471,8 @@ __global__ void compute_q(
   //declare auxiliary variables
   int l_s[NCP]; //local spin array
   float q_0; //overlap value 0
-  float q_r[3]; //Re overlap values
-  float q_i[3]; //Im overlap values
+  float q_1_r[3]; //Re overlap values 1
+  float q_1_i[3]; //Im overlap values 1
 
   //compute overlap values for each temperature replica
   if (i_bt<NREP)
@@ -481,8 +481,8 @@ __global__ void compute_q(
     q_0 = 0.0;
     for(int i_q = 0; i_q<3; ++i_q) //overlap value index
     {
-      q_r[i_q] = 0.0;
-      q_i[i_q] = 0.0;
+      q_1_r[i_q] = 0.0;
+      q_1_i[i_q] = 0.0;
     }
 
     //iterate over all sites
@@ -504,20 +504,20 @@ __global__ void compute_q(
 
       //compute overlap values
       q_0 += l_q;
-      q_r[0] += l_q*cosf(k*x);
-      q_i[0] += l_q*sinf(k*x);
-      q_r[1] += l_q*cosf(k*y);
-      q_i[1] += l_q*sinf(k*y);
-      q_r[2] += l_q*cosf(k*z);
-      q_i[2] += l_q*sinf(k*z);
+      q_1_r[0] += l_q*cosf(k*x);
+      q_1_i[0] += l_q*sinf(k*x);
+      q_1_r[1] += l_q*cosf(k*y);
+      q_1_i[1] += l_q*sinf(k*y);
+      q_1_r[2] += l_q*cosf(k*z);
+      q_1_i[2] += l_q*sinf(k*z);
     }
 
     //write observables array
     obs[NREP*i_gb+i_bt].q_0 = q_0/N;
     for(int i_q = 0; i_q<3; ++i_q) //overlap value index
     {
-      obs[NREP*i_gb+i_bt].q_r[i_q] = q_r[i_q]/N;
-      obs[NREP*i_gb+i_bt].q_i[i_q] = q_i[i_q]/N;
+      obs[NREP*i_gb+i_bt].q_1_r[i_q] = q_1_r[i_q]/N;
+      obs[NREP*i_gb+i_bt].q_1_i[i_q] = q_1_i[i_q]/N;
     }
   }
 }

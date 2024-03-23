@@ -56,8 +56,8 @@ struct obs_s //observables struct
   float e[NCP]; //energy
   float m[NCP]; //magnetization
   float q_0; //overlap value 0
-  float q_r[3]; //Re overlap values
-  float q_i[3]; //Im overlap values
+  float q_1_r[3]; //Re overlap values 1
+  float q_1_i[3]; //Im overlap values 1
 };
 
 //Classes

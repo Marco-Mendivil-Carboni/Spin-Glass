@@ -18,9 +18,9 @@ from matplotlib import pyplot as plt
 
 # cm = 1 / 2.54
 # mpl.rcParams["figure.figsize"] = [12.00 * cm, 8.00 * cm]
-# mpl.rcParams["figure.constrained_layout.use"] = True
+mpl.rcParams["figure.constrained_layout.use"] = True
 
-# mpl.rcParams["legend.frameon"] = False
+mpl.rcParams["legend.frameon"] = False
 
 # Define analyze_obs function
 
@@ -35,8 +35,8 @@ obs_dt = np.dtype(
         ("e", "f4", (2,)),
         ("m", "f4", (2,)),
         ("q_0", "f4"),
-        ("q_r", "f4", (3,)),
-        ("q_i", "f4", (3,)),
+        ("q_1_r", "f4", (3,)),
+        ("q_1_i", "f4", (3,)),
     ]
 )
 
@@ -68,32 +68,35 @@ def analyze_obs(sim_dir, H):
     q_0_avg = np.average(data["q_0"], axis=0)
     q_0_avg_avg = np.average(q_0_avg, axis=0)
 
-    q_2_avg = np.average(data["q_r"] ** 2 + data["q_i"] ** 2, axis=0)
+    q_2_avg = np.average(data["q_1_r"] ** 2 + data["q_1_i"] ** 2, axis=0)
     q_2_avg_avg = np.average(q_2_avg, axis=0)
 
-    q_r_avg = np.average(data["q_r"], axis=0)
+    q_r_avg = np.average(data["q_1_r"], axis=0)
     q_r_avg_avg = np.average(q_r_avg, axis=0)
 
-    q_i_avg = np.average(data["q_i"], axis=0)
+    q_i_avg = np.average(data["q_1_i"], axis=0)
     q_i_avg_avg = np.average(q_i_avg, axis=0)
 
     chi_0_avg = q_0_2_avg_avg - q_0_avg_avg**2
 
-    chi_avg = np.average(q_2_avg_avg - (q_r_avg_avg**2 + q_i_avg_avg**2), axis=1)
+    chi_avg = np.average(
+        q_2_avg_avg - (q_r_avg_avg**2 + q_i_avg_avg**2),
+        axis=1,
+    )
 
     xi_avg = np.sqrt(np.maximum(chi_0_avg / chi_avg - 1, np.zeros(NREP))) / (
         2 * np.sin(np.pi / L)
     )
 
-    plt.plot(beta, e_avg_avg / 100)
+    plt.plot(beta, e_avg_avg)
     plt.plot(beta, e_std_avg)
-    plt.plot(beta, 2 * e_avg_std)
+    plt.plot(beta, e_avg_std)
     plt.plot(beta, m_avg_avg)
     plt.plot(beta, m_std_avg)
     plt.plot(beta, m_avg_std)
     plt.plot(beta, chi_0_avg)
     plt.plot(beta, chi_avg)
-    plt.plot(beta, xi_avg / 100)
+    plt.plot(beta, xi_avg / L)
 
     plt.xscale("log")
     plt.show()
@@ -108,7 +111,7 @@ simdir = Path("Simulations")
 n_points = 1
 
 for i in range(n_points):
-    H = i / 8
+    H = (i + 0) / 8
     print(analyze_obs(simdir, H))
 
 # Make plots
