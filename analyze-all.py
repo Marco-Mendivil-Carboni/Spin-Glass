@@ -16,13 +16,13 @@ from matplotlib import pyplot as plt
 # mpl.rcParams["text.usetex"] = True
 # mpl.rcParams["font.family"] = "serif"
 
-# cm = 1 / 2.54
-# mpl.rcParams["figure.figsize"] = [12.00 * cm, 8.00 * cm]
+cm = 1 / 2.54
+mpl.rcParams["figure.figsize"] = [24.00 * cm, 16.00 * cm]
 mpl.rcParams["figure.constrained_layout.use"] = True
 
 mpl.rcParams["legend.frameon"] = False
 
-# Define analyze_obs function
+# Set constants and auxiliary variables
 
 L = 16
 N = L**3
@@ -42,8 +42,10 @@ obs_dt = np.dtype(
 
 beta = np.logspace(1, -3, num=NREP, base=2.0)
 
+# Define analyze_obs function
 
-def analyze_obs(sim_dir, H):
+
+def analyze_obs(sim_dir, H, ax):
     file_path = sim_dir / ("{:05.3f}".format(H) + "-obs.bin")
 
     data = np.fromfile(file_path, dtype=obs_dt)
@@ -68,50 +70,51 @@ def analyze_obs(sim_dir, H):
     q_0_avg = np.average(data["q_0"], axis=0)
     q_0_avg_avg = np.average(q_0_avg, axis=0)
 
-    q_2_avg = np.average(data["q_1_r"] ** 2 + data["q_1_i"] ** 2, axis=0)
-    q_2_avg_avg = np.average(q_2_avg, axis=0)
+    q_1_2_avg = np.average(data["q_1_r"] ** 2 + data["q_1_i"] ** 2, axis=0)
+    q_1_2_avg_avg = np.average(q_1_2_avg, axis=0)
 
-    q_r_avg = np.average(data["q_1_r"], axis=0)
-    q_r_avg_avg = np.average(q_r_avg, axis=0)
+    q_1_r_avg = np.average(data["q_1_r"], axis=0)
+    q_1_r_avg_avg = np.average(q_1_r_avg, axis=0)
 
-    q_i_avg = np.average(data["q_1_i"], axis=0)
-    q_i_avg_avg = np.average(q_i_avg, axis=0)
+    q_1_i_avg = np.average(data["q_1_i"], axis=0)
+    q_1_i_avg_avg = np.average(q_1_i_avg, axis=0)
 
     chi_0_avg = q_0_2_avg_avg - q_0_avg_avg**2
 
-    chi_avg = np.average(
-        q_2_avg_avg - (q_r_avg_avg**2 + q_i_avg_avg**2),
-        axis=1,
+    chi_1_avg = np.average(
+        q_1_2_avg_avg - (q_1_r_avg_avg**2 + q_1_i_avg_avg**2), axis=1
     )
 
-    xi_avg = np.sqrt(np.maximum(chi_0_avg / chi_avg - 1, np.zeros(NREP))) / (
-        2 * np.sin(np.pi / L)
-    )
+    chi_frac = np.maximum(chi_0_avg / chi_1_avg, np.ones(NREP))
 
-    plt.plot(beta, e_avg_avg)
-    plt.plot(beta, e_std_avg)
-    plt.plot(beta, e_avg_std)
-    plt.plot(beta, m_avg_avg)
-    plt.plot(beta, m_std_avg)
-    plt.plot(beta, m_avg_std)
-    plt.plot(beta, chi_0_avg)
-    plt.plot(beta, chi_avg)
-    plt.plot(beta, xi_avg / L)
+    xi_L_avg = np.sqrt(chi_frac - 1) / (2 * np.sin(np.pi / L))
 
-    plt.xscale("log")
-    plt.show()
-
-    return [H]
+    ax[0, 0].plot(beta, e_avg_avg)
+    ax[0, 1].plot(beta, e_std_avg)
+    ax[0, 2].plot(beta, e_avg_std)
+    ax[1, 0].plot(beta, m_avg_avg)
+    ax[1, 1].plot(beta, m_std_avg)
+    ax[1, 2].plot(beta, m_avg_std)
+    ax[2, 0].plot(beta, chi_0_avg)
+    ax[2, 1].plot(beta, chi_1_avg)
+    ax[2, 2].plot(beta, xi_L_avg / L)
 
 
-# Analyze observables
+# Analyze simulations
 
 simdir = Path("Simulations")
 
-n_points = 1
+fig, ax = plt.subplots(3, 3)
+
+for a in ax.ravel():
+    a.set_xscale("log")
+
+n_points = 2
 
 for i in range(n_points):
-    H = (i + 0) / 8
-    print(analyze_obs(simdir, H))
+    H = i / 8
+    analyze_obs(simdir, H, ax)
 
-# Make plots
+# View analysis
+
+plt.show()

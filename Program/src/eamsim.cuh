@@ -16,8 +16,8 @@ static constexpr int NDIS = 256; //number of disorder realizations
 static constexpr int NCP = 2; //number of disorder realization copies
 static constexpr int NL = NDIS*NCP; //number of lattices
 
-static constexpr int SBSHFL = 32; //Monte Carlo steps between shuffles
-static constexpr int SBMEAS = 2048; //Monte Carlo steps between measurements
+static constexpr int SBSHFL = 16; //Monte Carlo steps between shuffles
+static constexpr int SBMEAS = 1024; //Monte Carlo steps between measurements
 static constexpr int SPFILE = 262144; //Monte Carlo steps per file
 
 static constexpr int NSPS = 4; //number of spins per segment
