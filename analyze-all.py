@@ -50,8 +50,8 @@ def analyze_obs(sim_dir, H, ax):
 
     data = np.fromfile(file_path, dtype=obs_dt)
     data = data.reshape(-1, NDIS, NREP)
-    data = np.delete(data, range(len(data) // 4), axis=0)
-    print(data.shape)
+    data = np.delete(data, range(len(data) // 2), axis=0)
+
     e_avg = np.average(np.average(data["e"], axis=0), axis=2)
     e_std = np.average(np.std(data["e"], axis=0), axis=2)
     e_avg_avg = np.average(e_avg, axis=0)
@@ -69,13 +69,13 @@ def analyze_obs(sim_dir, H, ax):
     q_1_i_var = np.var(data["q_1_i"], axis=(0, 1))
     q_1_var = q_1_r_var + q_1_i_var
 
-    chi_0_avg = q_0_var
-    chi_1_avg = np.average(q_1_var, axis=1)
+    chi_0 = q_0_var
+    chi_1 = np.average(q_1_var, axis=1)
 
-    chi_frac = chi_0_avg / chi_1_avg
+    chi_frac = chi_0 / chi_1
     chi_frac = np.where(chi_frac > 1, chi_frac, 1)
 
-    xi_L_avg = np.sqrt(chi_frac - 1) / (2 * np.sin(np.pi / L))
+    xi_L = np.sqrt(chi_frac - 1) / (2 * np.sin(np.pi / L))
 
     ax[0, 0].plot(beta, e_avg_avg)
     ax[0, 1].plot(beta, e_std_avg)
@@ -83,9 +83,9 @@ def analyze_obs(sim_dir, H, ax):
     ax[1, 0].plot(beta, m_avg_avg)
     ax[1, 1].plot(beta, m_std_avg)
     ax[1, 2].plot(beta, m_avg_std)
-    ax[2, 0].plot(beta, chi_0_avg)
-    ax[2, 1].plot(beta, chi_1_avg)
-    ax[2, 2].plot(beta, xi_L_avg / L)
+    ax[2, 0].plot(beta, chi_0)
+    ax[2, 1].plot(beta, chi_1)
+    ax[2, 2].plot(beta, xi_L / L)
 
 
 # Analyze simulations

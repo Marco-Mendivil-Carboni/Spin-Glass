@@ -23,7 +23,7 @@ inline __device__ void init_prob(
 //compute probability lookup table
 inline __device__ void compute_prob(
   uint64_t s_prob[NREP][PTABW], //shared probability lookup table
-  float *s_rep_beta, //shared replica beta array
+  float s_rep_beta[NREP], //shared replica beta array
   const float H, //external magnetic field
   const int i_bt) //block thread index
 {
@@ -41,9 +41,9 @@ inline __device__ void compute_prob(
 
 //shuffle lattice temperature replicas
 inline __device__ void shuffle(
-  int *s_rep_idx, //shared replica index array
-  float *s_rep_beta, //shared replica beta array
-  float *s_tot_sum_e, //shared total energy sum array
+  int s_rep_idx[NREP], //shared replica index array
+  float s_rep_beta[NREP], //shared replica beta array
+  float s_tot_sum_e[NREP], //shared total energy sum array
   prng *prngs, //PRNG state array
   const int i_bt, //block thread index
   const int i_gt, //grid thread index
@@ -91,7 +91,7 @@ inline __device__ void shuffle(
 
 //perform skewed sequential sum reduction
 inline __device__ void sum_reduce(
-  float *s_tot_sum, //shared total sum array
+  float s_tot_sum[NREP], //shared total sum array
   short s_aux_sum[NREP][NTPB], //shared auxiliary sums array
   const int i_bt) //block thread index
 {
@@ -110,8 +110,8 @@ inline __device__ void sum_reduce(
 
 //perform Monte Carlo steps
 inline __device__ void perform_MC_steps(
-  uint32_t *slattice, //shuffled lattice array
-  float *s_rep_beta, //shared replica beta array
+  uint32_t s_slattice[L][L][L], //shared shuffled lattice array
+  float s_rep_beta[NREP], //shared replica beta array
   const float H, //external magnetic field
   prng *prngs, //PRNG state array
   int n_steps) //number of Monte Carlo steps
@@ -123,7 +123,6 @@ inline __device__ void perform_MC_steps(
   const int i_gt = CBDIM.x*CBDIM.y*CBDIM.z*i_gb+i_bt; //grid thread index
 
   //declare auxiliary variables
-  __shared__ uint32_t s_slattice[L][L][L]; //shared shuffled lattice array
   __shared__ uint64_t s_prob[NREP][PTABW]; //shared probability lookup table
 
   //initilize probability lookup table
@@ -131,15 +130,6 @@ inline __device__ void perform_MC_steps(
 
   //compute probability lookup table
   compute_prob(s_prob,s_rep_beta,H,i_bt);
-
-  //write shared shuffled lattice array
-  int xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
-  int yt = (L/2*(threadIdx.z&1))+(threadIdx.y>>1); //total y index
-  for (int zt = 0; zt<L; ++zt) //total z index
-  {
-    s_slattice[zt][yt][xt] = slattice[N*i_gb+L*L*zt+i_bt];
-  }
-  __syncthreads();
 
   //perform all Monte Carlo steps
   for (int step = 0; step<n_steps; ++step) //Monte Carlo step index
@@ -214,22 +204,16 @@ inline __device__ void perform_MC_steps(
       __syncthreads();
     }
   }
-
-  //write shuffled lattice array
-  for (int zt = 0; zt<L; ++zt) //total z index
-  {
-    slattice[N*i_gb+L*L*zt+i_bt] = s_slattice[zt][yt][xt];
-  }
   __syncthreads();
 }
 
 //perform Parallel Tempering shuffle
 inline __device__ void perform_PT_shuffle(
-  uint32_t *slattice, //shuffled lattice array
-  int *s_rep_idx, //shared replica index array
-  float *s_rep_beta, //shared replica beta array
-  float *s_tot_sum_e, //shared total energy sum array
-  float *s_tot_sum_m, //shared total magnetization sum array
+  uint32_t s_slattice[L][L][L], //shared shuffled lattice array
+  int s_rep_idx[NREP], //shared replica index array
+  float s_rep_beta[NREP], //shared replica beta array
+  float s_tot_sum_e[NREP], //shared total energy sum array
+  float s_tot_sum_m[NREP], //shared total magnetization sum array
   const float H, //external magnetic field
   prng *prngs, //PRNG state array
   bool mode) //shuffle mode
@@ -241,17 +225,7 @@ inline __device__ void perform_PT_shuffle(
   const int i_gt = CBDIM.x*CBDIM.y*CBDIM.z*i_gb+i_bt; //grid thread index
 
   //declare auxiliary variables
-  __shared__ uint32_t s_slattice[L][L][L]; //shared shuffled lattice array
   __shared__ short s_aux_sum[NREP][NTPB]; //shared auxiliary sums array
-
-  //write shared shuffled lattice array
-  int xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
-  int yt = (L/2*(threadIdx.z&1))+(threadIdx.y>>1); //total y index
-  for (int zt = 0; zt<L; ++zt) //total z index
-  {
-    s_slattice[zt][yt][xt] = slattice[N*i_gb+L*L*zt+i_bt];
-  }
-  __syncthreads();
 
   //initialize shared auxiliary sums array to 0
   for (int i_r = 0; i_r<NREP; ++i_r) //replica index
@@ -383,11 +357,21 @@ __global__ void run_simulation_section(
     CBDIM.x*CBDIM.y*threadIdx.z+CBDIM.x*threadIdx.y+threadIdx.x;
 
   //declare auxiliary variables
+  __shared__ uint32_t s_slattice[L][L][L]; //shared shuffled lattice array
   __shared__ int s_rep_idx[NREP]; //shared replica index array
   __shared__ float s_rep_beta[NREP]; //shared replica beta array
   __shared__ int s_prev_rep_idx[NREP]; //shared previous replica index array
   __shared__ float s_tot_sum_e[NREP]; //shared total energy sum array
   __shared__ float s_tot_sum_m[NREP]; //shared total magnetization sum array
+
+  //write shared shuffled lattice array
+  int xt = (L/2*(threadIdx.y&1))+threadIdx.x; //total x index
+  int yt = (L/2*(threadIdx.z&1))+(threadIdx.y>>1); //total y index
+  for (int zt = 0; zt<L; ++zt) //total z index
+  {
+    s_slattice[zt][yt][xt] = slattice[N*i_gb+L*L*zt+i_bt];
+  }
+  __syncthreads();
 
   //write shared replica index and beta arrays
   if (i_bt<NREP)
@@ -402,9 +386,15 @@ __global__ void run_simulation_section(
   {
     bool mode = (step/SBSHFL)&1; //shuffle mode
     if (i_bt<NREP){ s_prev_rep_idx[i_bt] = s_rep_idx[i_bt];}
-    perform_PT_shuffle(slattice,s_rep_idx,s_rep_beta,s_tot_sum_e,s_tot_sum_m,H,
-      prngs,mode);
-    perform_MC_steps(slattice,s_rep_beta,H,prngs,SBSHFL);
+    perform_PT_shuffle(s_slattice,s_rep_idx,s_rep_beta,s_tot_sum_e,s_tot_sum_m,
+      H,prngs,mode);
+    perform_MC_steps(s_slattice,s_rep_beta,H,prngs,SBSHFL);
+  }
+
+  //update shuffled lattice array
+  for (int zt = 0; zt<L; ++zt) //total z index
+  {
+    slattice[N*i_gb+L*L*zt+i_bt] = s_slattice[zt][yt][xt];
   }
 
   //update replica index-beta array
