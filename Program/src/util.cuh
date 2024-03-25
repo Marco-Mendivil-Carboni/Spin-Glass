@@ -3,9 +3,9 @@
 
 //Includes
 
+#include <iostream> //standard input/output stream objects
 #include <fstream> //file stream classes
 #include <iomanip> //input/output parametric manipulators
-#include <map> //map container classes
 
 //Classes
 

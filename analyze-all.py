@@ -46,12 +46,12 @@ beta = np.logspace(1, -3, num=NREP, base=2.0)
 
 
 def analyze_obs(sim_dir, H, ax):
-    file_path = sim_dir / ("{:05.3f}".format(H) + "-obs.bin")
+    file_path = sim_dir / ("{:06.4f}".format(H) + "-obs.bin")
 
     data = np.fromfile(file_path, dtype=obs_dt)
     data = data.reshape(-1, NDIS, NREP)
     data = np.delete(data, range(len(data) // 4), axis=0)
-
+    print(data.shape)
     e_avg = np.average(np.average(data["e"], axis=0), axis=2)
     e_std = np.average(np.std(data["e"], axis=0), axis=2)
     e_avg_avg = np.average(e_avg, axis=0)
@@ -64,28 +64,16 @@ def analyze_obs(sim_dir, H, ax):
     m_avg_std = np.std(m_avg, axis=0)
     m_std_avg = np.average(m_std, axis=0)
 
-    q_0_2_avg = np.average(data["q_0"] ** 2, axis=0)
-    q_0_2_avg_avg = np.average(q_0_2_avg, axis=0)
+    q_0_var = np.var(data["q_0"], axis=(0, 1))
+    q_1_r_var = np.var(data["q_1_r"], axis=(0, 1))
+    q_1_i_var = np.var(data["q_1_i"], axis=(0, 1))
+    q_1_var = q_1_r_var + q_1_i_var
 
-    q_0_avg = np.average(data["q_0"], axis=0)
-    q_0_avg_avg = np.average(q_0_avg, axis=0)
+    chi_0_avg = q_0_var
+    chi_1_avg = np.average(q_1_var, axis=1)
 
-    q_1_2_avg = np.average(data["q_1_r"] ** 2 + data["q_1_i"] ** 2, axis=0)
-    q_1_2_avg_avg = np.average(q_1_2_avg, axis=0)
-
-    q_1_r_avg = np.average(data["q_1_r"], axis=0)
-    q_1_r_avg_avg = np.average(q_1_r_avg, axis=0)
-
-    q_1_i_avg = np.average(data["q_1_i"], axis=0)
-    q_1_i_avg_avg = np.average(q_1_i_avg, axis=0)
-
-    chi_0_avg = q_0_2_avg_avg - q_0_avg_avg**2
-
-    chi_1_avg = np.average(
-        q_1_2_avg_avg - (q_1_r_avg_avg**2 + q_1_i_avg_avg**2), axis=1
-    )
-
-    chi_frac = np.maximum(chi_0_avg / chi_1_avg, np.ones(NREP))
+    chi_frac = chi_0_avg / chi_1_avg
+    chi_frac = np.where(chi_frac > 1, chi_frac, 1)
 
     xi_L_avg = np.sqrt(chi_frac - 1) / (2 * np.sin(np.pi / L))
 
@@ -109,10 +97,12 @@ fig, ax = plt.subplots(3, 3)
 for a in ax.ravel():
     a.set_xscale("log")
 
-n_points = 2
+analyze_obs(simdir, 0.0, ax)
 
-for i in range(n_points):
-    H = i / 8
+n_H_val = 0
+
+for i in range(n_H_val):
+    H = (2**i) / 16
     analyze_obs(simdir, H, ax)
 
 # View analysis

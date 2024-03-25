@@ -2,8 +2,6 @@
 
 #include "eamsim.cuh" //EA model simulation
 
-#include <time.h> //time utilities library
-
 //Device Functions
 
 //initialize probability lookup table
@@ -530,7 +528,7 @@ eamsim::eamsim(float H) //external magnetic field
 {
   //check parameters
   if (!(0.0<=H&&H<=4.0)){ throw error("H out of range");}
-  logger::record("H = "+cnfs(H,5,'0',3));
+  logger::record("H = "+cnfs(H,6,'0',4));
 
   //allocate device memory
   cuda_check(cudaMalloc(&repib,NREP*NL*sizeof(ib_s)));
@@ -690,6 +688,9 @@ void eamsim::load_checkpoint(std::ifstream &bin_inp_f) //binary input file
 //run whole simulation
 void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 {
+  //declare and initialize execution time
+  float t_e = clock(); //execution time
+
   //copy lattice array to shuffled lattice array
   cuda_check(cudaMemcpy(slattice,lattice,N*NL*sizeof(uint32_t),
     cudaMemcpyDeviceToDevice));
@@ -720,6 +721,11 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
   //copy lattice array to host
   cuda_check(cudaMemcpy(lattice_h,lattice,N*NL*sizeof(uint32_t),
     cudaMemcpyDeviceToHost));
+
+  //compute and record execution time
+  t_e = (clock()-t_e)/CLOCKS_PER_SEC;
+  t_e *= (1e12/SPFILE)/(N*NL*NREP);
+  logger::record("t_e = "+cnfs(t_e,5,'0',2)+" ps");
 
   //record success message
   logger::record("simulation ended");

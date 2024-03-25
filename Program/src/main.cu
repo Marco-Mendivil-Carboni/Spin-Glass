@@ -2,8 +2,6 @@
 
 #include "eamsim.cuh" //EA model simulation
 
-#include <iostream> //standard input/output stream objects
-
 //Functions
 
 //main function
@@ -21,7 +19,7 @@ int main(
 
   //declare auxiliary variables
   std::string simpathbeg = //simulation file path beginning
-    sim_dir+"/"+cnfs(H,5,'0',3)+"-";
+    sim_dir+"/"+cnfs(H,6,'0',4)+"-";
   std::string path; //complete file path
   std::string pattern; //file path pattern
   std::ifstream inp_f; //input file
