@@ -47,22 +47,18 @@ beta = np.logspace(1, -3, num=NREP, base=2.0)
 
 def analyze_obs(sim_dir, H, ax):
     file_path = sim_dir / ("{:06.4f}".format(H) + "-obs.bin")
+    print("file_path : " + str(file_path))
 
     data = np.fromfile(file_path, dtype=obs_dt)
     data = data.reshape(-1, NDIS, NREP)
     data = np.delete(data, range(len(data) // 2), axis=0)
+    print("data.shape : " + str(data.shape))
 
-    e_avg = np.average(np.average(data["e"], axis=0), axis=2)
-    e_std = np.average(np.std(data["e"], axis=0), axis=2)
-    e_avg_avg = np.average(e_avg, axis=0)
-    e_avg_std = np.std(e_avg, axis=0)
-    e_std_avg = np.average(e_std, axis=0)
+    e_avg = np.average(data["e"], axis=(0, 1))
+    e = np.average(e_avg, axis=1)
 
-    m_avg = np.average(np.average(data["m"], axis=0), axis=2)
-    m_std = np.average(np.std(data["m"], axis=0), axis=2)
-    m_avg_avg = np.average(m_avg, axis=0)
-    m_avg_std = np.std(m_avg, axis=0)
-    m_std_avg = np.average(m_std, axis=0)
+    m_avg = np.average(data["m"], axis=(0, 1))
+    m = np.average(m_avg, axis=1)
 
     q_0_var = np.var(data["q_0"], axis=(0, 1))
     q_1_r_var = np.var(data["q_1_r"], axis=(0, 1))
@@ -77,34 +73,32 @@ def analyze_obs(sim_dir, H, ax):
 
     xi_L = np.sqrt(chi_frac - 1) / (2 * np.sin(np.pi / L))
 
-    ax[0, 0].plot(beta, e_avg_avg)
-    ax[0, 1].plot(beta, e_std_avg)
-    ax[0, 2].plot(beta, e_avg_std)
-    ax[1, 0].plot(beta, m_avg_avg)
-    ax[1, 1].plot(beta, m_std_avg)
-    ax[1, 2].plot(beta, m_avg_std)
-    ax[2, 0].plot(beta, chi_0)
-    ax[2, 1].plot(beta, chi_1)
-    ax[2, 2].plot(beta, xi_L / L)
+    ax[0, 0].plot(beta, e)
+    ax[0, 1].plot(beta, m)
+    ax[1, 0].plot(beta, chi_0)
+    ax[1, 1].plot(beta, xi_L / L)
 
 
 # Analyze simulations
 
 simdir = Path("Simulations")
 
-fig, ax = plt.subplots(3, 3)
+fig, ax = plt.subplots(2, 2)
 
-for a in ax.ravel():
-    a.set_xscale("log")
-
-analyze_obs(simdir, 0.0, ax)
-
-n_H_val = 0
-
+n_H_val = 1
 for i in range(n_H_val):
-    H = (2**i) / 16
+    H = i / 16
     analyze_obs(simdir, H, ax)
 
 # View analysis
+
+for iax in ax.ravel():
+    iax.set_xscale("log")
+    iax.set_xlabel("$\\beta$")
+
+ax[0, 0].set_ylabel("$e$")
+ax[0, 1].set_ylabel("$m$")
+ax[1, 0].set_ylabel("$\\chi(0)$")
+ax[1, 1].set_ylabel("$\\xi_L/L$")
 
 plt.show()
