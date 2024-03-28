@@ -24,11 +24,8 @@ mpl.rcParams["legend.frameon"] = False
 
 # Set constants and auxiliary variables
 
-L = 16
-N = L**3
-
 NREP = 24
-NDIS = 256
+NDIS = 1024
 
 obs_dt = np.dtype(
     [
@@ -45,11 +42,12 @@ beta = np.logspace(1, -3, num=NREP, base=2.0)
 # Define analyze_obs function
 
 
-def analyze_obs(sim_dir, H, ax):
-    file_path = sim_dir / ("{:06.4f}".format(H) + "-obs.bin")
-    print("file_path : " + str(file_path))
+def analyze_obs(dir, L, H, ax):
+    sub_dir = dir / ("{:02}".format(L))
+    file = sub_dir / ("{:06.4f}".format(H) + "-obs.bin")
+    print("file_path : " + str(file))
 
-    data = np.fromfile(file_path, dtype=obs_dt)
+    data = np.fromfile(file, dtype=obs_dt)
     data = data.reshape(-1, NDIS, NREP)
     data = np.delete(data, range(len(data) // 2), axis=0)
     print("data.shape : " + str(data.shape))
@@ -67,7 +65,6 @@ def analyze_obs(sim_dir, H, ax):
 
     chi_0 = q_0_var
     chi_1 = np.average(q_1_var, axis=1)
-
     chi_frac = chi_0 / chi_1
     chi_frac = np.where(chi_frac > 1, chi_frac, 1)
 
@@ -81,14 +78,19 @@ def analyze_obs(sim_dir, H, ax):
 
 # Analyze simulations
 
-simdir = Path("Simulations")
+dir = Path("Simulations")
+
+L = 16
+
+n_H_val = 1
 
 fig, ax = plt.subplots(2, 2)
 
-n_H_val = 1
+analyze_obs(dir, L, 0, ax)
+
 for i in range(n_H_val):
-    H = i / 16
-    analyze_obs(simdir, H, ax)
+    H = (i + 1) / 16
+    analyze_obs(dir, L, H, ax)
 
 # View analysis
 

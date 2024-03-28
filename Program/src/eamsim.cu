@@ -675,7 +675,7 @@ void eamsim::load_checkpoint(std::ifstream &bin_inp_f) //binary input file
   logger::record("checkpoint loaded");
 }
 
-//run whole simulation
+//run whole simulation and write output to file
 void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
 {
   //declare and initialize execution time
@@ -685,7 +685,7 @@ void eamsim::run_simulation(std::ofstream &bin_out_f) //binary output file
   cuda_check(cudaMemcpy(slattice,lattice,N*NL*sizeof(uint32_t),
     cudaMemcpyDeviceToDevice));
 
-  //run whole simulation
+  //run whole simulation and write output to file
   for (int step = 0; step<SPFILE; step += SBMEAS) //Monte Carlo step index
   {
     //show simulation progress

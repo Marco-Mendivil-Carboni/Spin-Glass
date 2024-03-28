@@ -37,7 +37,7 @@ int main(
     eamsim sim = eamsim(H); //simulation
 
     //look for previous simulations
-    pattern = simpathbeg+"obs.bin";
+    pattern = simpathbeg+"chkpt.bin";
     prev_sim = glob_count(pattern);
 
     if (!prev_sim) //initialize lattice array
@@ -53,7 +53,7 @@ int main(
       inp_f.close();
     }
 
-    //run whole simulation
+    //run whole simulation and write output to file
     path = simpathbeg+"obs.bin";
     out_f.open(path,std::ios::binary|std::ios::app);
     check_file(out_f,path);

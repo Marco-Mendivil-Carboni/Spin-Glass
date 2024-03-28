@@ -12,7 +12,7 @@
 static constexpr int L = 16; //lattice size
 static constexpr int N = L*L*L; //number of sites
 
-static constexpr int NDIS = 256; //number of disorder realizations
+static constexpr int NDIS = 1024; //number of disorder realizations
 static constexpr int NCP = 2; //number of disorder realization copies
 static constexpr int NL = NDIS*NCP; //number of lattices
 
@@ -83,7 +83,7 @@ class eamsim //EA model simulation
   //load state from binary file
   void load_checkpoint(std::ifstream &bin_inp_f); //binary input file
 
-  //run whole simulation
+  //run whole simulation and write output to file
   void run_simulation(std::ofstream &bin_out_f); //binary output file
 
   private:
