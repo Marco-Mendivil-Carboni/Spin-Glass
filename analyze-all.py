@@ -17,7 +17,7 @@ from matplotlib import pyplot as plt
 # mpl.rcParams["font.family"] = "serif"
 
 cm = 1 / 2.54
-mpl.rcParams["figure.figsize"] = [24.00 * cm, 16.00 * cm]
+mpl.rcParams["figure.figsize"] = [30.00 * cm, 20.00 * cm]
 mpl.rcParams["figure.constrained_layout.use"] = True
 
 mpl.rcParams["legend.frameon"] = False
@@ -39,10 +39,12 @@ obs_dt = np.dtype(
 
 beta = np.logspace(1, -3, num=NREP, base=2.0)
 
+color = ["#17a69b", "#194bb2", "#611bbf", "#cc1dad", "#d81e2c"]
+
 # Define analyze_obs function
 
 
-def analyze_obs(dir, L, H, ax):
+def analyze_obs(dir, L, H):
     sub_dir = dir / ("{:02}".format(L))
     file = sub_dir / ("{:06.4f}".format(H) + "-obs.bin")
     print("file_path : " + str(file))
@@ -70,33 +72,33 @@ def analyze_obs(dir, L, H, ax):
 
     xi_L = np.sqrt(chi_frac - 1) / (2 * np.sin(np.pi / L))
 
-    ax[0, 0].plot(beta, e)
-    ax[0, 1].plot(beta, m)
-    ax[1, 0].plot(beta, chi_0)
-    ax[1, 1].plot(beta, xi_L / L)
+    return [e, m, chi_0, xi_L / L]
 
 
 # Analyze simulations
 
 dir = Path("Simulations")
 
-L = 16
-
-n_H_val = 1
-
 fig, ax = plt.subplots(2, 2)
 
-analyze_obs(dir, L, 0, ax)
+L = 16
+for i in range(5):
+    H = i / 16
 
-for i in range(n_H_val):
-    H = (i + 1) / 16
-    analyze_obs(dir, L, H, ax)
+    res = analyze_obs(dir, L, H)
+    label = "$H$ = {:06.4f}".format(H)
+
+    ax[0, 0].plot(beta, res[0], color=color[i], label=label)
+    ax[0, 1].plot(beta, res[1], color=color[i], label=label)
+    ax[1, 0].plot(beta, res[2], color=color[i], label=label)
+    ax[1, 1].plot(beta, res[3], color=color[i], label=label)
 
 # View analysis
 
 for iax in ax.ravel():
     iax.set_xscale("log")
     iax.set_xlabel("$\\beta$")
+    iax.legend()
 
 ax[0, 0].set_ylabel("$e$")
 ax[0, 1].set_ylabel("$m$")
