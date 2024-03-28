@@ -1,9 +1,7 @@
 bin/
 
 *.pdf
-*.png
 
-*.dat
 *.log
 *.bin
 
