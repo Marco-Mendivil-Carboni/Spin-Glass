@@ -39,7 +39,7 @@ obs_dt = np.dtype(
 
 beta = np.logspace(1, -3, num=NREP, base=2.0)
 
-color = ["#17a69b", "#194bb2", "#611bbf", "#cc1dad", "#d81e2c"]
+col = ["#17a69b", "#194bb2", "#611bbf", "#cc1dad", "#d81e2c"]
 
 # Define analyze_obs function
 
@@ -86,12 +86,12 @@ for i in range(5):
     H = i / 16
 
     res = analyze_obs(dir, L, H)
-    label = "$H$ = {:06.4f}".format(H)
+    lab = "$H$ = {:06.4f}".format(H)
 
-    ax[0, 0].plot(beta, res[0], color=color[i], label=label)
-    ax[0, 1].plot(beta, res[1], color=color[i], label=label)
-    ax[1, 0].plot(beta, res[2], color=color[i], label=label)
-    ax[1, 1].plot(beta, res[3], color=color[i], label=label)
+    ax[0, 0].plot(beta, res[0], color=col[i], label=lab)
+    ax[0, 1].plot(beta, res[1], color=col[i], label=lab)
+    ax[1, 0].plot(beta, res[2], color=col[i], label=lab)
+    ax[1, 1].plot(beta, res[3], color=col[i], label=lab)
 
 # View analysis
 
