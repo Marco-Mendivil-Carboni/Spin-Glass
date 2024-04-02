@@ -12,7 +12,7 @@
 static constexpr int L = 16; //lattice size
 static constexpr int N = L*L*L; //number of sites
 
-static constexpr int NDIS = 1024; //number of disorder realizations
+static constexpr int NDIS = 2048; //number of disorder realizations
 static constexpr int NCP = 2; //number of disorder realization copies
 static constexpr int NL = NDIS*NCP; //number of lattices
 
