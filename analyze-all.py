@@ -89,12 +89,12 @@ def analyze_obs(dir: Path, L: int, H: float) -> None:
 
 # Analyze simulations
 
-dir = Path("Simulations")
+sim_dir = Path("Simulations")
 
-analyze_obs(dir, 16, 0.0000)
-analyze_obs(dir, 16, 0.0625)
-analyze_obs(dir, 16, 0.1250)
-# analyze_obs(dir, 16, 0.1875)
+analyze_obs(sim_dir, 16, 0.0000)
+analyze_obs(sim_dir, 16, 0.0625)
+analyze_obs(sim_dir, 16, 0.1250)
+analyze_obs(sim_dir, 16, 0.1875)
 
-# analyze_obs(dir, 14, 0.0000)
-# analyze_obs(dir, 18, 0.0000)
+# analyze_obs(sim_dir, 14, 0.0000)
+# analyze_obs(sim_dir, 18, 0.0000)

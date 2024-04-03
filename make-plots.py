@@ -21,6 +21,8 @@ plt.rcParams["figure.constrained_layout.use"] = True
 
 plt.rcParams["legend.frameon"] = False
 
+plt.rcParams["axes.formatter.limits"] = (-4, 4)
+
 # Set constants and auxiliary variables
 
 color = ["#169f62", "#1880ac", "#221ab9", "#a31cc5"]
@@ -80,12 +82,15 @@ def make_plot(
 
 # Make plots
 
-dir = Path("Simulations")
+sim_dir = Path("Simulations")
+plots_dir = Path("Plots")
 
-n_f = 5
+n_figs = 4
+n_H_val = 4
+# n_L_val = 3
 
 figs, axs = [], []
-for i_f in range(n_f):
+for _ in range(n_figs):
     fig, ax = plt.subplots()
     figs.append(fig)
     axs.append(ax)
@@ -99,31 +104,52 @@ for ax in [axs[0], axs[1], axs[3]]:
         linewidth=1.00,
     )
 
-axs[4].axline(
-    (0.00, 0.00),
-    (1.00, 1.00),
-    alpha=0.50,
-    color=color[0],
-    label="$m/H$ = $\\beta$",
-    linestyle="--",
-    linewidth=1.00,
+L = 16
+H = 0.0
+
+df_res = read_res(sim_dir, L, H)
+
+make_plot(axs[0], df_res, "chi_0_a", color[0], None)
+make_plot(axs[1], df_res, "xi_LL_a", color[0], None)
+make_plot(axs[2], df_res, "e_a", color[0], None)
+make_plot(axs[3], df_res, "m_a", color[0], None)
+
+for ax in axs:
+    ax.set_xlabel("$\\beta$")
+    ax.set_xscale("log", base=2)
+axs[0].set_ylabel("$\\chi(0)$")
+axs[1].set_ylabel("$\\xi_L/L$")
+axs[2].set_ylabel("$e$")
+axs[3].set_ylabel("$m$")
+
+figs[0].savefig(plots_dir / "0/chi_0.pdf")
+figs[1].savefig(plots_dir / "0/xi_LL.pdf")
+figs[2].savefig(plots_dir / "0/e.pdf")
+figs[3].savefig(plots_dir / "0/m.pdf")
+
+for ax in axs:
+    ax.clear()
+
+for ax in [axs[0], axs[1], axs[3]]:
+    ax.axhline(
+        y=0,
+        alpha=0.25,
+        color="black",
+        linestyle="--",
+        linewidth=1.00,
+    )
+
+iax_1 = axs[1].inset_axes(
+    [0.125, 0.225, 0.30, 0.35],
+    xlim=(0.125, 0.275),
+    ylim=(0.000, 0.030),
 )
 
-# iax = axs[1].inset_axes(
-#     [0.15, 0.15, 0.35, 0.35],
-#     xlim=(0.10, 0.20),
-#     ylim=(0.00, 0.02),
-#     xticklabels=[],
-#     yticklabels=[],
-# )
-
-n_H = 3
-
 L = 16
-for i_H in range(n_H):
+for i_H in range(n_H_val):
     H = i_H / 16
 
-    df_res = read_res(dir, L, H)
+    df_res = read_res(sim_dir, L, H)
     label = "$H$ = {:06.4f}".format(H)
 
     make_plot(axs[0], df_res, "chi_0_a", color[i_H], label)
@@ -131,34 +157,48 @@ for i_H in range(n_H):
     make_plot(axs[2], df_res, "e_a", color[i_H], label)
     make_plot(axs[3], df_res, "m_a", color[i_H], label)
 
-    if H > 0:
-        df_res["m_a_a"] /= H
-        df_res["m_a_e"] /= H
-        make_plot(axs[4], df_res, "m_a", color[i_H], label)
-    
-    # make_plot(iax, df_res, "xi_LL_a", color[i_H], label)
-
-for ax in [axs[0], axs[1], axs[2], axs[3]]:
-    ax.set_xscale("log", base=2)
+    make_plot(iax_1, df_res, "xi_LL_a", color[i_H], label)
 
 for ax in axs:
     ax.set_xlabel("$\\beta$")
+    ax.set_xscale("log", base=2)
     ax.legend()
-
 axs[0].set_ylabel("$\\chi(0)$")
 axs[1].set_ylabel("$\\xi_L/L$")
 axs[2].set_ylabel("$e$")
 axs[3].set_ylabel("$m$")
-axs[4].set_ylabel("$m/H$")
 
-# Save plots
+figs[0].savefig(plots_dir / "H/chi_0.pdf")
+figs[1].savefig(plots_dir / "H/xi_LL.pdf")
+figs[2].savefig(plots_dir / "H/e.pdf")
+figs[3].savefig(plots_dir / "H/m.pdf")
 
-dir = Path("Plots")
+axs[3].clear()
 
-figs[0].savefig(dir / "chi_0.pdf")
-figs[1].savefig(dir / "xi_LL.pdf")
-figs[2].savefig(dir / "e.pdf")
-figs[3].savefig(dir / "m.pdf")
-figs[4].savefig(dir / "m_H.pdf")
+axs[3].axline(
+    (0.00, 0.00),
+    (0.80, 0.80),
+    alpha=0.50,
+    color=color[0],
+    label="$m/H$ = $\\beta$",
+    linestyle="--",
+    linewidth=1.00,
+)
 
-# plt.show()
+L = 16
+for i_H in range(1, n_H_val):
+    H = i_H / 16
+
+    df_res = read_res(sim_dir, L, H)
+    label = "$H$ = {:06.4f}".format(H)
+
+    df_res["m_a_a"] /= H
+    df_res["m_a_e"] /= H
+
+    make_plot(axs[3], df_res, "m_a", color[i_H], label)
+
+axs[3].set_xlabel("$\\beta$")
+axs[3].legend()
+axs[3].set_ylabel("$m/H$")
+
+figs[3].savefig(plots_dir / "H/mH.pdf")
