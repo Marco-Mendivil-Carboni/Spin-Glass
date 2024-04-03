@@ -93,7 +93,7 @@ dir = Path("Simulations")
 
 analyze_obs(dir, 16, 0.0000)
 analyze_obs(dir, 16, 0.0625)
-# analyze_obs(dir, 16, 0.1250)
+analyze_obs(dir, 16, 0.1250)
 # analyze_obs(dir, 16, 0.1875)
 
 # analyze_obs(dir, 14, 0.0000)
