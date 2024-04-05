@@ -34,7 +34,6 @@ def analyze_obs(dir: Path, L: int, H: float) -> None:
     therm_b = filename.stat().st_size // 2
     data = np.memmap(filename, dtype=obs_dt, mode="r", offset=therm_b)
     data = data.reshape(-1, NDIS, NREP)
-    print("data.shape[0] : " + str(data.shape[0]))
 
     chi_0_a = np.average(data["q_0"] ** 2, axis=0)
     chi_0_a_a = np.average(chi_0_a, axis=0)
@@ -73,16 +72,18 @@ def analyze_obs(dir: Path, L: int, H: float) -> None:
 
     filename = sub_dir / ("{:06.4f}".format(H) + "-res.dat")
     file = open(filename, "w")
+    tot_MC_steps = 2 * data.shape[0] * 1024
+    file.write(f"# tot_MC_steps : {tot_MC_steps:,}\n")
     for i_r in range(NREP):
-        file.write("{:16.12f}".format(beta[i_r]))
-        file.write("{:16.12f}".format(chi_0_a_a[i_r]))
-        file.write("{:16.12f}".format(chi_0_a_e[i_r]))
-        file.write("{:16.12f}".format(xi_LL_a_a[i_r]))
-        file.write("{:16.12f}".format(xi_LL_a_e[i_r]))
-        file.write("{:16.12f}".format(e_a_a[i_r]))
-        file.write("{:16.12f}".format(e_a_e[i_r]))
-        file.write("{:16.12f}".format(m_a_a[i_r]))
-        file.write("{:16.12f}".format(m_a_e[i_r]))
+        file.write(f"{beta[i_r]:16.12f}")
+        file.write(f"{chi_0_a_a[i_r]:16.12f}")
+        file.write(f"{chi_0_a_e[i_r]:16.12f}")
+        file.write(f"{xi_LL_a_a[i_r]:16.12f}")
+        file.write(f"{xi_LL_a_e[i_r]:16.12f}")
+        file.write(f"{e_a_a[i_r]:16.12f}")
+        file.write(f"{e_a_e[i_r]:16.12f}")
+        file.write(f"{m_a_a[i_r]:16.12f}")
+        file.write(f"{m_a_e[i_r]:16.12f}")
         file.write("\n")
     file.close()
 
@@ -91,10 +92,9 @@ def analyze_obs(dir: Path, L: int, H: float) -> None:
 
 sim_dir = Path("Simulations")
 
+analyze_obs(sim_dir, 12, 0.0000)
+analyze_obs(sim_dir, 14, 0.0000)
 analyze_obs(sim_dir, 16, 0.0000)
 analyze_obs(sim_dir, 16, 0.0625)
 analyze_obs(sim_dir, 16, 0.1250)
 analyze_obs(sim_dir, 16, 0.1875)
-
-# analyze_obs(sim_dir, 14, 0.0000)
-# analyze_obs(sim_dir, 18, 0.0000)
