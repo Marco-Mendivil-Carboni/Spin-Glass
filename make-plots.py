@@ -30,6 +30,8 @@ color = ["#169f62", "#194bb2", "#a31cc5", "#d81e2c"]
 sim_dir = Path("Simulations")
 plots_dir = Path("Plots")
 
+plots_dir.mkdir(exist_ok=True)
+
 n_var = 4
 
 n_H_v = 4
@@ -44,7 +46,7 @@ def read_res(dir: Path, L: int, H: float) -> pd.DataFrame:
 
     df_res = pd.read_csv(
         filename,
-        delim_whitespace=True,
+        sep="\\s+",
         comment="#",
         header=None,
     )

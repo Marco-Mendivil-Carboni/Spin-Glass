@@ -5,6 +5,7 @@
 
 #include "util.cuh" //general utilities
 
+#include <stdint.h> //integer types declarations
 #include <curand_kernel.h> //cuRAND device functions
 
 //Constants
